@@ -139,6 +139,7 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     ["choice": "opus-4.8-thinking", "variant": "Claude Opus 4.8 Thinking", "provider": "tabitoken", "providerLabel": "TabiToken", "id": "claude-opus-4-8-thinking", "name": "claude-opus-4-8-thinking"],
     ["choice": "kimi-k3-free", "variant": "Kimi K3 Free", "provider": "tokenrouter", "providerLabel": "TokenRouter", "id": "moonshotai/kimi-k3-free", "name": "moonshotai/kimi-k3-free"],
   ]
+  let defaultTabiTokenBaseURL = "https://api.tabitoken.com/v1"
   let instructionsURL = URL(fileURLWithPath: NSHomeDirectory())
     .appendingPathComponent(".pi/agent/pi-space-instructions.txt")
   func instructions() -> String {
@@ -330,7 +331,7 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
       "agentRouterConfigured": providerConfigured("agentrouter", config: config),
       "tokenRouterConfigured": providerConfigured("tokenrouter", config: config),
       "tabiTokenConfigured": providerConfigured("tabitoken", config: config),
-      "tabiTokenBaseURL": ((config["providers"] as? [String: Any])?["tabitoken"] as? [String: Any])?["baseUrl"] as? String ?? "",
+      "tabiTokenBaseURL": ((config["providers"] as? [String: Any])?["tabitoken"] as? [String: Any])?["baseUrl"] as? String ?? defaultTabiTokenBaseURL,
       "selectedProvider": selectedProvider ?? "",
       "selectedModel": selectedModel ?? "",
       "success": success,
@@ -416,10 +417,12 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
       return
     }
     let tabiKey = tabiTokenKey?.trimmingCharacters(in: .whitespacesAndNewlines)
-    let tabiURL = tabiTokenBaseURL?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let enteredTabiURL = tabiTokenBaseURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     let existingTabi = (readModelsConfig()["providers"] as? [String: Any])?["tabitoken"] as? [String: Any]
     let effectiveTabiKey = (tabiKey?.isEmpty == false ? tabiKey : existingTabi?["apiKey"] as? String) ?? ""
-    let effectiveTabiURL = (tabiURL?.isEmpty == false ? tabiURL : existingTabi?["baseUrl"] as? String) ?? ""
+    let savedTabiURL = existingTabi?["baseUrl"] as? String ?? ""
+    let rawTabiURL = !enteredTabiURL.isEmpty ? enteredTabiURL : (!savedTabiURL.isEmpty ? savedTabiURL : defaultTabiTokenBaseURL)
+    let effectiveTabiURL = rawTabiURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
     if !effectiveTabiKey.isEmpty || !effectiveTabiURL.isEmpty {
       guard !effectiveTabiKey.isEmpty else {
         syncProviderSettings(message: "Enter the TabiToken API key.", success: false)
@@ -446,7 +449,7 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     config["providers"] = providers
     do {
       try writeModelsConfig(config)
-      syncProviderSettings(message: "Provider configuration saved.")
+      syncProviderSettings(message: "Provider configuration saved. TabiToken is ready.")
       rpc.start(cwd, continuing: true, provider: selectedProvider, model: selectedModel)
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { [weak self] in self?.refresh() }
     } catch {
