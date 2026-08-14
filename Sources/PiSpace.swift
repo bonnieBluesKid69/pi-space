@@ -90,6 +90,15 @@ final class RPC {
     do {
       try p.run()
       process = p
+      p.terminationHandler = { [weak self, weak p] process in
+        guard let self, self.process === p else { return }
+        DispatchQueue.main.async {
+          guard self.process === p else { return }
+          self.process = nil
+          self.input = nil
+          self.failure?("Pi exited unexpectedly (status \(process.terminationStatus)). Start a new session or check the selected provider.")
+        }
+      }
     } catch { failure?(error.localizedDescription) }
   }
   func send(_ x: [String: Any]) {
