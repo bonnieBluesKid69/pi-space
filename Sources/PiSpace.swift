@@ -382,8 +382,10 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
       syncProviderSettings(message: "AgentRouter keys must begin with sk-.", success: false)
       return
     }
-    if let tokenKey, !tokenKey.isEmpty, !tokenKey.hasPrefix("tr_") {
-      syncProviderSettings(message: "TokenRouter keys must begin with tr_.", success: false)
+    if let tokenKey, !tokenKey.isEmpty,
+      !tokenKey.hasPrefix("tr_"), !tokenKey.hasPrefix("sk-")
+    {
+      syncProviderSettings(message: "TokenRouter keys must begin with sk- or tr_.", success: false)
       return
     }
     var config = readModelsConfig()
