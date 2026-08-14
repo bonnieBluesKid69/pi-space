@@ -137,6 +137,9 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
   var selectedProvider = UserDefaults.standard.string(forKey: "PiSpaceProvider")
   var selectedModel = UserDefaults.standard.string(forKey: "PiSpaceModel")
   var pendingModel: (provider: String, model: String)?
+  var pendingVoiceActions = [[String: String]]()
+  let voiceNotification = Notification.Name("com.olivergreen.pispace.voice")
+  let voiceResponseNotification = Notification.Name("com.olivergreen.pispace.voice.response")
   let modelsURL = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".pi/agent/models.json")
   let managedModels: [[String: Any]] = [
     ["choice": "gpt-5.6-sol", "variant": "GPT-5.6 Sol", "provider": "agentrouter", "providerLabel": "AgentRouter", "id": "gpt-5.6-sol", "name": "gpt-5.6-sol"],
@@ -172,6 +175,8 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
   }
   override func viewDidLoad() {
     super.viewDidLoad()
+    DistributedNotificationCenter.default().addObserver(
+      self, selector: #selector(receiveVoiceAction(_:)), name: voiceNotification, object: nil)
     rpc.event = { [weak self] in self?.forward($0) }
     rpc.failure = { [weak self] in self?.js("appError", ["message": $0]) }
     guard let path = Bundle.main.path(forResource: "PiSpace", ofType: "html"),
@@ -182,6 +187,36 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     }
     web.loadHTMLString(html, baseURL: Bundle.main.resourceURL)
   }
+  @objc func receiveVoiceAction(_ notification: Notification) {
+    guard let info = notification.userInfo as? [String: String], info["action"] != nil else { return }
+    if !ready {
+      pendingVoiceActions.append(info)
+      return
+    }
+    handleVoiceAction(info)
+  }
+
+  private func handleVoiceAction(_ info: [String: String]) {
+    guard let action = info["action"] else { return }
+    switch action {
+    case "prompt":
+      if let text = info["text"], !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        js("voicePrompt", ["text": text])
+      }
+    case "abort": rpc.send(["type": "abort"])
+    case "summarize": js("voicePrompt", ["text": "Summarize this conversation so far in a concise spoken summary."])
+    case "bed": rpc.send(["type": "abort"])
+    default: break
+    }
+  }
+
+  func publishVoiceResponse(_ text: String) {
+    let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !clean.isEmpty else { return }
+    DistributedNotificationCenter.default().postNotificationName(
+      voiceResponseNotification, object: nil, userInfo: ["text": clean], deliverImmediately: true)
+  }
+
   func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
     decisionHandler: @escaping (WKNavigationActionPolicy) -> Void)
   {
@@ -199,6 +234,8 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     ready = true
     queue.forEach(forward)
     queue.removeAll()
+    pendingVoiceActions.forEach(handleVoiceAction)
+    pendingVoiceActions.removeAll()
     js("workspaceChosen", ["path": cwd])
     js("instructionsLoaded", ["text": instructions()])
     ensureManagedModels()
@@ -268,6 +305,21 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
       }
     case "newSession": rpc.send(["type": "new_session"])
     case "compact": rpc.send(["type": "compact"])
+    case "rpcCommand":
+      guard let command = b["command"] as? String,
+        ["abort", "abort_retry", "abort_bash", "clone", "export_html"].contains(command)
+      else { return }
+      var request: [String: Any] = ["type": command]
+      if command == "export_html", let outputPath = b["outputPath"] as? String, !outputPath.isEmpty {
+        request["outputPath"] = NSString(string: outputPath).expandingTildeInPath
+      }
+      rpc.send(request)
+    case "rpcToggle":
+      guard let command = b["command"] as? String,
+        ["set_auto_compaction", "set_auto_retry"].contains(command),
+        let enabled = b["enabled"] as? Bool
+      else { return }
+      rpc.send(["type": command, "enabled": enabled])
     case "refresh": refresh()
     case "sessions": sessions()
     case "switchSession":
@@ -676,6 +728,18 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     if eventType == "agent_settled" || eventType == "compaction_end" {
       rpc.send(["type": "get_session_stats"])
     }
+    if (eventType == "agent_end" || eventType == "message_end"),
+      let message = (eventType == "message_end" ? x["message"] : (x["messages"] as? [[String: Any]])?.last(where: { $0["role"] as? String == "assistant" })) as? [String: Any],
+      message["role"] as? String == "assistant"
+    {
+      let text: String
+      if let content = message["content"] as? String {
+        text = content
+      } else if let content = message["content"] as? [[String: Any]] {
+        text = content.compactMap { $0["text"] as? String }.joined(separator: "\n")
+      } else { text = "" }
+      publishVoiceResponse(text)
+    }
     if x["type"] as? String == "response", x["command"] as? String == "set_model",
       x["success"] as? Bool == false
     {
@@ -724,7 +788,10 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     let script = "window[\(String(reflecting: f))](\(payload));"
     web.evaluateJavaScript(script)
   }
-  deinit { rpc.stop() }
+  deinit {
+    DistributedNotificationCenter.default().removeObserver(self)
+    rpc.stop()
+  }
 }
 final class Delegate: NSObject, NSApplicationDelegate {
   var window: NSWindow!

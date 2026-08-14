@@ -63,6 +63,51 @@ The listener asks for Microphone and Speech Recognition access when first opened
 
 See [docs/USAGE.md](docs/USAGE.md) for the complete usage guide and [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for common setup problems.
 
+## Slash commands
+
+Commands are handled locally by Pi Space unless marked **Pi RPC**. Slash commands are intercepted before they can be sent to the model.
+
+| Command | Arguments | What it does |
+| --- | --- | --- |
+| `/model` | `model-id` | Switches the active managed model. |
+| `/thinking` | `off`, `minimal`, `low`, `med`, `medium`, `high` | Changes the active model's reasoning level when supported. |
+| `/key` | `provider api-key` | Updates an AgentRouter, TokenRouter, or TabiToken key without displaying it in chat. |
+| `/compact` | none | Compacts older conversation context. **Pi RPC** |
+| `/clear` | none | Starts a fresh session. |
+| `/new` | none | Alias for `/clear`. |
+| `/sessions` | none | Opens the saved-session browser. |
+| `/workspace` | `[path]` | Changes the active workspace; without a path, opens a folder picker. |
+| `/instructions` | `text` | Saves persistent local instructions applied to future prompts. |
+| `/settings` | none | Opens Settings. |
+| `/help` | none | Prints the complete slash-command list. |
+| `/status` | none | Shows the active model, context usage, and session cost. |
+| `/abort` | none | Stops the active response. **Pi RPC** |
+| `/abort-retry` | none | Cancels an automatic retry delay. **Pi RPC** |
+| `/abort-bash` | none | Stops the active shell command. **Pi RPC** |
+| `/clone` | none | Duplicates the current session branch. **Pi RPC** |
+| `/export` | `[path]` | Exports the current session as HTML. **Pi RPC** |
+| `/auto-compact` | `on` or `off` | Enables or disables automatic context compaction. **Pi RPC** |
+| `/auto-retry` | `on` or `off` | Enables or disables automatic retry. **Pi RPC** |
+| `/voice` | none | Shows the Wake Pi voice command list. |
+
+Type `/` in the composer to open autocomplete. Use the arrow keys to move through suggestions, Enter or Tab to select one, and Escape to dismiss the palette.
+
+## Voice commands
+
+Install the optional listener with `./scripts/install.sh --with-wake-listener`. After granting Microphone and Speech Recognition access, the listener runs in the macOS menu bar.
+
+| Phrase | What it does |
+| --- | --- |
+| “Wake up Pi” | Opens Pi Space and starts voice dictation. |
+| “Send it” | Sends the dictated prompt to the active local RPC session. |
+| “Cancel” | Discards the current dictated prompt. |
+| “Stop Pi” | Aborts the active Pi response. |
+| “Repeat that” | Speaks the last assistant response aloud. |
+| “Summarize this” | Requests a concise spoken summary from Pi. |
+| “Time for bed Pi” | Aborts active work and closes Pi Space. |
+
+Voice actions communicate through local macOS distributed notifications. No network listener is opened by Wake Pi.
+
 ## Security
 
 Pi runs local tools with your user account's permissions. Selecting a workspace changes Pi's starting directory; it does **not** restrict Pi to that folder or create a sandbox. Review tool activity and use a container or VM for untrusted work.

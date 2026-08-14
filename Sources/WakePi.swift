@@ -2,7 +2,7 @@ import AVFoundation
 import AppKit
 import Speech
 
-final class WakeListener: NSObject, NSApplicationDelegate {
+final class WakeListener: NSObject, NSApplicationDelegate, NSSpeechSynthesizerDelegate {
   private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-AU"))
   private let engine = AVAudioEngine()
   private var request: SFSpeechAudioBufferRecognitionRequest?
@@ -14,6 +14,14 @@ final class WakeListener: NSObject, NSApplicationDelegate {
   private var restartScheduledGeneration: Int?
   private var speechFailureCount = 0
   private var lastTrigger = Date.distantPast
+  private var voiceMode: VoiceMode = .wakeWord
+  private var dictatedText = ""
+  private var lastResponse = ""
+  private var voiceResponsePending = false
+  private let speaker = NSSpeechSynthesizer()
+  private enum VoiceMode { case wakeWord, dictation }
+  private let voiceNotification = Notification.Name("com.olivergreen.pispace.voice")
+  private let responseNotification = Notification.Name("com.olivergreen.pispace.voice.response")
   private let appCandidates = [
     URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Applications/Pi Space.app"),
     URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Desktop/Pi Space.app"),
@@ -26,6 +34,9 @@ final class WakeListener: NSObject, NSApplicationDelegate {
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     NSLog("Wake Pi Listener launched")
+    speaker.delegate = self
+    DistributedNotificationCenter.default().addObserver(
+      self, selector: #selector(receiveVoiceResponse(_:)), name: responseNotification, object: nil)
     buildMenu()
     requestPermissions()
   }
@@ -40,13 +51,21 @@ final class WakeListener: NSObject, NSApplicationDelegate {
 
   private func updateMenu(_ state: String) {
     let menu = NSMenu()
-    let status = NSMenuItem(title: state, action: nil, keyEquivalent: "")
+    let status = NSMenuItem(
+      title: voiceMode == .dictation ? "Dictating… say send it or cancel" : state,
+      action: nil, keyEquivalent: "")
     status.isEnabled = false
     menu.addItem(status)
     menu.addItem(.separator())
     let open = NSMenuItem(title: "Open Pi Space", action: #selector(openPi), keyEquivalent: "")
     open.target = self
     menu.addItem(open)
+    if voiceMode == .dictation {
+      let cancel = NSMenuItem(
+        title: "Cancel Dictation", action: #selector(cancelDictation), keyEquivalent: "")
+      cancel.target = self
+      menu.addItem(cancel)
+    }
     let toggle = NSMenuItem(
       title: paused ? "Resume Listening" : "Pause Listening", action: #selector(toggleListening),
       keyEquivalent: "")
@@ -108,8 +127,10 @@ final class WakeListener: NSObject, NSApplicationDelegate {
     }
     let nextRequest = SFSpeechAudioBufferRecognitionRequest()
     nextRequest.shouldReportPartialResults = true
-    nextRequest.taskHint = .confirmation
-    nextRequest.contextualStrings = ["wake up Pi", "time for bed Pi", "Pi Space"]
+    nextRequest.taskHint = voiceMode == .dictation ? .dictation : .confirmation
+    nextRequest.contextualStrings = voiceMode == .dictation
+      ? ["send it", "cancel", "send", "cancel dictation"]
+      : ["wake up Pi", "time for bed Pi", "stop Pi", "repeat that", "summarize this", "Pi Space"]
     request = nextRequest
     node.removeTap(onBus: 0)
     node.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
@@ -150,6 +171,10 @@ final class WakeListener: NSObject, NSApplicationDelegate {
     let normalized = transcription.lowercased()
       .replacingOccurrences(of: "[^a-z0-9]+", with: " ", options: .regularExpression)
       .trimmingCharacters(in: .whitespacesAndNewlines)
+    if voiceMode == .dictation {
+      inspectDictation(normalized)
+      return
+    }
     let words = Set(normalized.split(separator: " ").map(String.init))
     let mentionsPi = words.contains("pi") || words.contains("pie") || normalized.contains("wakeupi")
     guard Date().timeIntervalSince(lastTrigger) > 3 else { return }
@@ -160,16 +185,109 @@ final class WakeListener: NSObject, NSApplicationDelegate {
       scheduleRestart(after: 1.2)
       return
     }
+    if mentionsPi && normalized.contains("stop pi") {
+      lastTrigger = Date()
+      sendVoiceAction("abort")
+      speak("Stopped Pi.")
+      return
+    }
+    if mentionsPi && (normalized.contains("repeat that") || normalized.contains("repeat")) {
+      lastTrigger = Date()
+      speak(lastResponse.isEmpty ? "There is no previous response to repeat." : lastResponse)
+      return
+    }
+    if mentionsPi && (normalized.contains("summarize this") || normalized.contains("summarise this")) {
+      lastTrigger = Date()
+      voiceResponsePending = true
+      sendVoiceAction("summarize")
+      speak("I’m summarizing the current conversation.")
+      return
+    }
     guard mentionsPi && (normalized.contains("wake up") || normalized.contains("wakeupi")) else {
       return
     }
     lastTrigger = Date()
     NSLog("Recognized wake up Pi")
     openPi()
-    scheduleRestart(after: 1.2)
+    beginDictation()
+  }
+
+  private func inspectDictation(_ normalized: String) {
+    if normalized == "cancel" || normalized.contains("cancel dictation") {
+      cancelDictation()
+      return
+    }
+    if normalized == "send" || normalized == "send it" || normalized.contains("send it") {
+      let beforeCommand = normalized.components(separatedBy: "send it").first?
+        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      let text = (beforeCommand.isEmpty ? dictatedText : beforeCommand)
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !text.isEmpty else {
+        speak("I didn’t hear a prompt.")
+        beginDictation()
+        return
+      }
+      sendVoicePrompt(text)
+      return
+    }
+    dictatedText = normalized
+    if !normalized.isEmpty { updateMenu("Dictating… say send it or cancel") }
+  }
+
+  private func beginDictation() {
+    voiceMode = .dictation
+    dictatedText = ""
+    speak("I’m listening.")
+  }
+
+  @objc private func cancelDictation() {
+    dictatedText = ""
+    voiceMode = .wakeWord
+    speak("Cancelled.")
+  }
+
+  private func sendVoicePrompt(_ text: String) {
+    voiceMode = .wakeWord
+    dictatedText = ""
+    voiceResponsePending = true
+    sendVoiceAction("prompt", text: text)
+    speak("Sending.")
+  }
+
+  private func sendVoiceAction(_ action: String, text: String? = nil) {
+    var info: [String: String] = ["action": action]
+    if let text { info["text"] = text }
+    DistributedNotificationCenter.default().postNotificationName(
+      voiceNotification, object: nil, userInfo: info, deliverImmediately: true)
+  }
+
+  @objc private func receiveVoiceResponse(_ notification: Notification) {
+    guard let info = notification.userInfo as? [String: String], let text = info["text"], !text.isEmpty else { return }
+    lastResponse = text
+    if voiceResponsePending {
+      voiceResponsePending = false
+      speak(text)
+    }
+  }
+
+  private func speak(_ text: String) {
+    let cleaned = text.replacingOccurrences(of: "`", with: "").replacingOccurrences(of: "**", with: "")
+    guard !cleaned.isEmpty else { return }
+    stopRecognition()
+    speaker.stopSpeaking()
+    speaker.startSpeaking(cleaned)
+  }
+
+  func speechSynthesizer(_ sender: NSSpeechSynthesizer, didFinishSpeaking finishedSpeaking: Bool) {
+    guard !paused else { return }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+      guard let self, !self.engine.isRunning else { return }
+      self.startListening()
+    }
   }
 
   private func closePi() {
+    sendVoiceAction("bed")
     let running = NSWorkspace.shared.runningApplications.filter {
       $0.localizedName == "Pi Space"
         || ($0.bundleIdentifier?.hasPrefix("com.pispace.app") == true)
