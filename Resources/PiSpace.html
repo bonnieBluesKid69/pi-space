@@ -139,7 +139,109 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   .page{padding:28px 20px}.row{flex-wrap:wrap}.row .grow{min-width:100%}.setting{grid-template-columns:90px 1fr}
   .session{grid-template-areas:"title" "summary" "date";grid-template-columns:1fr}.session span{margin-top:2px}
 }
-</style></head><body><div class="app"><aside class="side"><div class="brand"><div class="logo">π</div><div><b>Pi Space</b><small>LOCAL AGENT</small></div></div><button class="nav active" data-view="chat">Chat</button><button class="nav" data-view="sessions">Sessions</button><button class="nav" data-view="workspace">Workspace</button><button class="nav" data-view="settings">Settings</button><div class="foot"><div class="status" id="status">PI ONLINE</div><div>Local RPC · macOS</div></div></aside><main class="main">
+</style><style>
+/* Warm desktop workspace inspired by Claude's interface language. */
+:root{
+  color-scheme:light;
+  --bg:#f7f6f2;
+  --side:#eeece5;
+  --surface:#ffffff;
+  --surface-2:#f1efe9;
+  --surface-3:#e8e5dd;
+  --line:#dedbd2;
+  --line-strong:#cbc7bd;
+  --text:#262624;
+  --muted:#6f6d67;
+  --faint:#96938b;
+  --accent:#d97757;
+  --accent-dim:#f3e5de;
+  --green:#5f8068;
+  --red:#b84b4b;
+  --radius:8px;
+}
+html,body{background:var(--bg);color:var(--text)}
+.app{grid-template-columns:224px minmax(0,1fr);background:var(--bg)}
+.side{align-items:stretch;padding:14px 10px 14px;background:var(--side);border-right:0}
+.side:after{display:none}
+.brand{height:50px;margin:0 0 10px;padding:0 10px 10px;border-bottom:0;gap:10px}
+.logo{width:28px;height:28px;border:0;border-radius:0;background:transparent;color:var(--accent);font:600 0/1 -apple-system,sans-serif;box-shadow:none}
+.logo:before{content:"✳";font-size:23px;line-height:28px}
+.logo:after{display:none}
+.brand b{font-size:14px;font-weight:620;color:var(--text)}
+.brand small{display:none}
+.nav{height:38px;flex-basis:38px;margin:1px 0;padding:0 10px 0 36px;border-radius:7px;color:#5e5c57;font-size:12px;font-weight:470}
+.nav:before{left:12px;width:14px;color:#77746d;font-size:14px}
+.nav[data-view="chat"]:before{content:"＋"}.nav[data-view="sessions"]:before{content:"◷"}.nav[data-view="workspace"]:before{content:"⌂"}.nav[data-view="settings"]:before{content:"⚙"}
+.nav:hover{color:var(--text);background:#e7e4dc}
+.nav.active{color:var(--text);background:#e2dfd6;font-weight:540}
+.nav.active:before{color:var(--text)}
+.nav.active:after{display:none}
+.foot{padding:13px 10px 2px;border-top:1px solid #ddd9d0;color:var(--faint);font-size:9px}
+.status{color:var(--green);font-size:8px}.status:before{width:6px;height:6px;box-shadow:none}
+.main{background:var(--bg)}
+.top{height:66px;flex-basis:66px;padding:0 28px;border-bottom:0;background:var(--bg)}
+.top h1{font-size:14px;font-weight:560}
+.top p{margin-top:4px;color:var(--faint);font-size:9px}
+.meta{gap:12px;color:var(--muted);font-size:9px}
+.dot{width:6px;height:6px;background:var(--green);box-shadow:none}.dot.work{background:var(--accent);box-shadow:none}.dot.error{background:var(--red);box-shadow:none}
+.feed{padding:26px max(34px,calc((100% - 720px)/2)) 16px;scrollbar-color:#cbc7bd transparent}
+.empty{color:var(--muted)}
+.empty h2{margin:18px 0 8px;color:#34332f;font-family:Georgia,"Times New Roman",serif;font-size:26px;font-weight:400}
+.empty p{color:var(--muted);font-size:12px}
+.emptyMark{width:42px;height:42px;border:0;border-radius:0;background:transparent}
+.emptyMark:before{content:"✳";position:static;display:block;width:auto;height:auto;background:transparent;color:var(--accent);font-size:36px;line-height:42px;text-align:center}
+.emptyMark:after,.emptyMark i{display:none}
+.msg{margin-bottom:28px}
+.who{margin-bottom:8px;color:#77736c;font-size:9px;font-weight:650;text-transform:none}
+.user{margin-left:16%;display:flex;flex-direction:column;align-items:flex-end}
+.user .who{display:none}
+.body{color:#34332f;font-size:13px;line-height:1.68}
+.assistant .body{width:100%;padding-right:0}
+.user .body{max-width:88%;padding:12px 15px;border:0;border-radius:8px;background:#e9e6df;color:#302f2c}
+.typing i{background:var(--accent)}
+.thinkingpanel,.tool{border:1px solid var(--line);border-radius:8px;background:#f3f1eb}
+.thinkingpanel{margin-bottom:22px}
+.thinkinghead,.toolhead{height:39px;padding:0 13px}
+.thinkinghead{color:#7a675d;font-size:9px;text-transform:none}
+.thinkinghead .spin,.state{width:6px;height:6px;box-shadow:none}
+.thinkinghead .spin,.state{background:var(--accent)}
+.thinkingpanel.done .thinkinghead{color:var(--green)}
+.thinkingbody,.toolbody{border-top:1px solid var(--line);background:#fbfaf7;color:#595751;font:10px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace}
+.tool.ok{border-color:#cbd7cd}.tool.fail{border-color:#ddc5c5}
+.toolname{color:#46443f;font-size:10px;font-weight:600}.summary{color:var(--faint);font-size:9px}
+.section{border-color:#e5e2da}.label{color:#8d8981}.path{color:#9a563f}.terminal{color:#4e4c47}
+.removed{background:#f4e3e3;color:#9d3f44}.added{background:#e4efe7;color:#477457}
+.errorbox{border-color:#dfc3c3;background:#f8e9e9;color:#963f43}
+.composerwrap{padding:12px max(34px,calc((100% - 720px)/2)) 24px;background:linear-gradient(180deg,transparent 0,var(--bg) 15px)}
+.composer{padding:10px 11px 8px;border:1px solid var(--line-strong);border-radius:8px;background:#fff;box-shadow:0 1px 2px #2b292418,0 5px 18px #2b29240a}
+.composer:focus-within{border-color:#aaa59a;background:#fff;box-shadow:0 1px 2px #2b292418,0 0 0 2px #d9775714}
+.composer textarea{height:58px;color:var(--text);font-size:13px}.composer textarea::placeholder{color:#99958d}
+.bar{color:var(--faint)}
+.send,.stop{width:30px;height:30px;border-radius:7px}
+.send{border:0;background:var(--accent);color:#fff;font-size:16px}.send:hover{background:#c96849}.send:active{transform:none}
+.stop{border-color:#d8baba;background:#f5e3e3;color:var(--red)}
+.page{padding:34px max(36px,calc((100% - 760px)/2));background:var(--bg)}
+.page h1{color:#34332f;font-family:Georgia,"Times New Roman",serif;font-size:25px;font-weight:400}
+.pagehead{margin-bottom:24px;padding-bottom:18px;border-color:var(--line)}.pagehead p{color:var(--muted);font-size:10px}
+.card,.sessions{border:1px solid var(--line);border-radius:8px;background:#fff}
+.card{padding:18px}
+.field{height:35px;border-color:var(--line-strong);border-radius:7px;background:#fbfaf7;color:var(--text);font-size:10px}
+.btn{height:33px;border-color:var(--line-strong);border-radius:7px;background:#fff;color:#4f4d48;font-size:10px;font-weight:540}
+.btn:hover{border-color:#aaa69c;background:#f8f7f3;color:var(--text)}
+.btn.primary{border-color:#d97757;background:#d97757;color:#fff}
+.btn.primary:hover{border-color:#c96849;background:#c96849;color:#fff}
+.setting{border-color:#e6e3dc}.setting>.label{color:#77736c}
+.session{border-color:#e6e3dc}.session:hover{background:#f7f5f0}.session b{color:#45433f}.session small,.session span{color:#8b8880}
+.instructionbox{border-color:var(--line-strong);border-radius:7px;background:#fbfaf7;color:var(--text)}
+.instructionbox:focus{border-color:#aaa59a;box-shadow:0 0 0 2px #d9775714}
+.saved{color:var(--green)}.hint{color:var(--faint)}
+@media(max-width:860px){
+  .app{grid-template-columns:64px minmax(0,1fr)}
+  .side{padding:14px 8px}.brand{padding:0 0 10px}.nav{width:44px}.nav.active:after{display:none}
+  .top{padding:0 22px}.feed,.composerwrap{padding-left:24px;padding-right:24px}
+}
+@media(max-width:650px){.user{margin-left:8%}.user .body{max-width:94%}}
+</style></head><body><div class="app"><aside class="side"><div class="brand"><div class="logo"></div><div><b>Pi Space</b><small>LOCAL AGENT</small></div></div><button class="nav active" data-view="chat">Chat</button><button class="nav" data-view="sessions">Sessions</button><button class="nav" data-view="workspace">Workspace</button><button class="nav" data-view="settings">Settings</button><div class="foot"><div class="status" id="status">PI ONLINE</div><div>Local RPC · macOS</div></div></aside><main class="main">
 <section id="view-chat" class="view chat active"><header class="top"><div><h1>Pi Space</h1><p id="workspaceMeta">Home workspace</p></div><div class="meta"><button id="newChat" class="btn primary">New chat</button><span id="modelMeta">Connecting...</span><i id="dot" class="dot"></i></div></header><div id="feed" class="feed"><div id="empty" class="empty"><div><div class="emptyMark"><i></i></div><h2>Ready when you are.</h2><p>Ask Pi to inspect, edit, run, or build.</p></div></div></div><div class="composerwrap"><div class="composer"><textarea id="prompt" placeholder="Message Pi..." autofocus></textarea><div class="bar"><span>Return to send · Shift Return for a new line</span><button id="stop" class="stop" title="Stop"></button><button id="send" class="send" title="Send">↑</button></div></div></div></section>
 <section id="view-sessions" class="view page"><div class="pagehead"><h1>Sessions</h1><p>Continue an earlier Pi conversation.</p></div><div id="sessions" class="sessions"><div class="session"><b>Loading...</b></div></div></section>
 <section id="view-workspace" class="view page"><div class="pagehead"><h1>Workspace</h1><p>Choose the folder Pi starts in. This is not a sandbox.</p></div><div class="card"><span class="label">CURRENT FOLDER</span><div class="row"><input id="workspace" class="field grow"><button id="choose" class="btn">Choose</button><button id="apply" class="btn primary">Apply</button></div><div class="hint">Applying starts a fresh Pi process in that folder.</div></div></section>
