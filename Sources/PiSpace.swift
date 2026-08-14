@@ -156,6 +156,19 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     }
     web.loadHTMLString(html, baseURL: Bundle.main.resourceURL)
   }
+  func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
+    decisionHandler: @escaping (WKNavigationActionPolicy) -> Void)
+  {
+    guard navigationAction.navigationType == .linkActivated, let url = navigationAction.request.url
+    else {
+      decisionHandler(.allow)
+      return
+    }
+    if ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
+      NSWorkspace.shared.open(url)
+    }
+    decisionHandler(.cancel)
+  }
   func webView(_ w: WKWebView, didFinish n: WKNavigation!) {
     ready = true
     queue.forEach(forward)
@@ -171,9 +184,36 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     case "prompt":
       if let t = b["text"] as? String {
         let custom = instructions()
+        let supplied = b["attachments"] as? [[String: Any]] ?? []
+        var images = [[String: Any]]()
+        var fileContext = [String]()
+        for attachment in supplied.prefix(5) {
+          guard let name = attachment["name"] as? String,
+            let mimeType = attachment["mimeType"] as? String,
+            let data = attachment["data"] as? String
+          else { continue }
+          if mimeType == "application/x-directory", let decoded = Data(base64Encoded: data),
+            let path = String(data: decoded, encoding: .utf8)
+          {
+            fileContext.append("Attached local folder: \(path). Inspect it with the available tools.")
+          } else if mimeType.hasPrefix("image/") {
+            images.append(["type": "image", "data": data, "mimeType": mimeType])
+          } else if let decoded = Data(base64Encoded: data), decoded.count <= 1_000_000,
+            let content = String(data: decoded, encoding: .utf8)
+          {
+            fileContext.append("""
+              <attached_file name="\(name)" mime_type="\(mimeType)">
+              \(content)
+              </attached_file>
+              """)
+          } else {
+            fileContext.append("Attached binary file: \(name) (\(mimeType)).")
+          }
+        }
+        let userText = ([t] + fileContext).filter { !$0.isEmpty }.joined(separator: "\n\n")
         let message =
           custom.isEmpty
-          ? t
+          ? userText
           : """
           <persistent_user_instructions>
           Follow these preferences throughout this response unless they conflict with safety, system, or developer requirements:
@@ -181,12 +221,22 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
           </persistent_user_instructions>
 
           <user_message>
-          \(t)
+          \(userText)
           </user_message>
           """
-        rpc.send(["type": "prompt", "message": message, "streamingBehavior": "steer"])
+        var command: [String: Any] = [
+          "type": "prompt", "message": message, "streamingBehavior": "steer",
+        ]
+        if !images.isEmpty { command["images"] = images }
+        rpc.send(command)
       }
     case "abort": rpc.send(["type": "abort"])
+    case "chooseAttachments": chooseAttachments()
+    case "copyText":
+      if let text = b["text"] as? String {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+      }
     case "newSession": rpc.send(["type": "new_session"])
     case "refresh": refresh()
     case "sessions": sessions()
@@ -212,6 +262,46 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
       rpc.send(response)
     default: break
     }
+  }
+  func chooseAttachments() {
+    let panel = NSOpenPanel()
+    panel.canChooseFiles = true
+    panel.canChooseDirectories = true
+    panel.allowsMultipleSelection = true
+    guard panel.runModal() == .OK else { return }
+    var attachments = [[String: Any]]()
+    for url in panel.urls.prefix(5) {
+      var isDirectory: ObjCBool = false
+      FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+      if isDirectory.boolValue {
+        attachments.append([
+          "name": url.lastPathComponent, "mimeType": "application/x-directory",
+          "data": Data(url.path.utf8).base64EncodedString(),
+        ])
+        continue
+      }
+      guard let values = try? url.resourceValues(forKeys: [.fileSizeKey]),
+        (values.fileSize ?? 0) <= 8 * 1_024 * 1_024,
+        let data = try? Data(contentsOf: url)
+      else {
+        js("appError", ["message": "\(url.lastPathComponent) is larger than 8 MB or unreadable."])
+        continue
+      }
+      let mimeTypes = [
+        "png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "gif": "image/gif",
+        "webp": "image/webp", "txt": "text/plain", "md": "text/markdown",
+        "json": "application/json", "js": "text/javascript", "ts": "text/typescript",
+        "swift": "text/x-swift", "py": "text/x-python", "sh": "text/x-shellscript",
+        "html": "text/html", "css": "text/css", "csv": "text/csv", "xml": "application/xml",
+        "yml": "text/yaml", "yaml": "text/yaml",
+      ]
+      attachments.append([
+        "name": url.lastPathComponent,
+        "mimeType": mimeTypes[url.pathExtension.lowercased()] ?? "application/octet-stream",
+        "data": data.base64EncodedString(),
+      ])
+    }
+    js("attachmentsChosen", ["attachments": attachments])
   }
   func refresh() {
     ["get_state", "get_messages", "get_available_models", "get_available_thinking_levels"].forEach {

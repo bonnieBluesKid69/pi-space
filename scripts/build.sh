@@ -104,7 +104,9 @@ build_pi() {
   mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
   compile_universal "$ROOT/Sources/PiSpace.swift" "$app/Contents/MacOS/PiSpace" AppKit WebKit
   cp "$ROOT/Resources/Info.plist" "$app/Contents/Info.plist"
-  cp "$ROOT/Resources/PiSpace.html" "$ROOT/Resources/PiSpace.icns" "$app/Contents/Resources/"
+  cp "$ROOT/Resources/PiSpace.html" "$ROOT/Resources/PiSpace.icns" \
+    "$ROOT/Resources/THIRD-PARTY-NOTICES.txt" "$app/Contents/Resources/"
+  cp -R "$ROOT/Resources/vendor" "$app/Contents/Resources/"
   sign_bundle "$app"
   echo "Built $app"
 }

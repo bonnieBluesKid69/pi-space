@@ -20,6 +20,10 @@ done
 
 [[ -f "$PI_APP/Contents/Resources/PiSpace.html" ]]
 [[ -f "$PI_APP/Contents/Resources/PiSpace.icns" ]]
+[[ -f "$PI_APP/Contents/Resources/THIRD-PARTY-NOTICES.txt" ]]
+[[ -f "$PI_APP/Contents/Resources/vendor/marked.min.js" ]]
+[[ -f "$PI_APP/Contents/Resources/vendor/purify.min.js" ]]
+[[ -f "$PI_APP/Contents/Resources/vendor/highlight.min.js" ]]
 [[ "$(lipo -archs "$PI_APP/Contents/MacOS/PiSpace")" == *arm64* ]]
 [[ "$(lipo -archs "$PI_APP/Contents/MacOS/PiSpace")" == *x86_64* ]]
 [[ "$(lipo -archs "$WAKE_APP/Contents/MacOS/WakePi")" == *arm64* ]]
