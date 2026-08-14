@@ -267,6 +267,7 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
         NSPasteboard.general.setString(text, forType: .string)
       }
     case "newSession": rpc.send(["type": "new_session"])
+    case "compact": rpc.send(["type": "compact"])
     case "refresh": refresh()
     case "sessions": sessions()
     case "switchSession":
@@ -274,6 +275,7 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
         rpc.send(["type": "switch_session", "sessionPath": files[i].path])
       }
     case "chooseWorkspace": choose()
+    case "chooseAndApplyWorkspace": choose(applySelection: true)
     case "applyWorkspace": if let p = b["path"] as? String { apply(p) }
     case "setModel":
       if let provider = b["provider"] as? String, let model = b["model"] as? String {
@@ -285,6 +287,18 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
         tokenRouterKey: b["tokenRouterKey"] as? String,
         tabiTokenKey: b["tabiTokenKey"] as? String,
         tabiTokenBaseURL: b["tabiTokenBaseURL"] as? String)
+    case "updateProviderKey":
+      guard let provider = b["provider"] as? String, let key = b["key"] as? String else { return }
+      switch provider.lowercased() {
+      case "agentrouter":
+        saveProviderKeys(agentRouterKey: key, tokenRouterKey: nil, tabiTokenKey: nil, tabiTokenBaseURL: nil)
+      case "tokenrouter":
+        saveProviderKeys(agentRouterKey: nil, tokenRouterKey: key, tabiTokenKey: nil, tabiTokenBaseURL: nil)
+      case "tabitoken":
+        saveProviderKeys(agentRouterKey: nil, tokenRouterKey: nil, tabiTokenKey: key, tabiTokenBaseURL: nil)
+      default:
+        js("commandResult", ["success": false, "message": "Unknown provider: \(provider)"])
+      }
     case "saveInstructions":
       if let text = b["text"] as? String { saveInstructions(text) }
     case "setThinking":
@@ -534,7 +548,7 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     js("attachmentsChosen", ["attachments": attachments])
   }
   func refresh() {
-    ["get_state", "get_messages", "get_available_models", "get_available_thinking_levels"].forEach {
+    ["get_state", "get_messages", "get_available_models", "get_available_thinking_levels", "get_session_stats"].forEach {
       rpc.send(["type": $0])
     }
     sessions()
@@ -632,11 +646,13 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     }
     js("sessionsLoaded", ["sessions": list])
   }
-  func choose() {
+  func choose(applySelection: Bool = false) {
     let p = NSOpenPanel()
     p.canChooseDirectories = true
     p.canChooseFiles = false
-    if p.runModal() == .OK, let x = p.url?.path { js("workspaceChosen", ["path": x]) }
+    if p.runModal() == .OK, let path = p.url?.path {
+      if applySelection { apply(path) } else { js("workspaceChosen", ["path": path]) }
+    }
   }
   func apply(_ raw: String) {
     let p = NSString(string: raw).expandingTildeInPath
@@ -656,6 +672,10 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
       return
     }
     js("rpcEvent", x)
+    let eventType = x["type"] as? String
+    if eventType == "agent_settled" || eventType == "compaction_end" {
+      rpc.send(["type": "get_session_stats"])
+    }
     if x["type"] as? String == "response", x["command"] as? String == "set_model",
       x["success"] as? Bool == false
     {
@@ -671,13 +691,18 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
       if !cancelled {
         rpc.send(["type": "get_messages"])
         rpc.send(["type": "get_state"])
+        rpc.send(["type": "get_session_stats"])
       }
     } else if command == "new_session" {
       let cancelled = (x["data"] as? [String: Any])?["cancelled"] as? Bool ?? false
       if !cancelled {
         rpc.send(["type": "get_messages"])
         rpc.send(["type": "get_state"])
+        rpc.send(["type": "get_session_stats"])
       }
+    } else if command == "compact" {
+      rpc.send(["type": "get_messages"])
+      rpc.send(["type": "get_session_stats"])
     } else if ["set_model", "set_thinking_level"].contains(command) {
       if command == "set_model", let pending = pendingModel {
         selectedProvider = pending.provider
@@ -689,6 +714,7 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
       }
       rpc.send(["type": "get_state"])
       rpc.send(["type": "get_available_thinking_levels"])
+      rpc.send(["type": "get_session_stats"])
     }
   }
   func js(_ f: String, _ x: [String: Any]) {
