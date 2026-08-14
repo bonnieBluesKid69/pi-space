@@ -1,0 +1,30 @@
+name: Checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check sources
+        run: make check
+      - name: Build and validate bundles
+        run: ./scripts/build.sh --clean
+      - name: Verify bundles
+        run: |
+          set -euo pipefail
+          for app in "dist/Pi Space.app" "dist/Wake Pi Listener.app"; do
+            codesign --verify --deep --strict "$app"
+            plutil -lint "$app/Contents/Info.plist"
+          done
+          test "$(lipo -archs 'dist/Pi Space.app/Contents/MacOS/PiSpace')" = "x86_64 arm64" || \
+            test "$(lipo -archs 'dist/Pi Space.app/Contents/MacOS/PiSpace')" = "arm64 x86_64"
+          test "$(lipo -archs 'dist/Wake Pi Listener.app/Contents/MacOS/WakePi')" = "x86_64 arm64" || \
+            test "$(lipo -archs 'dist/Wake Pi Listener.app/Contents/MacOS/WakePi')" = "arm64 x86_64"

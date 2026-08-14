@@ -1,0 +1,27 @@
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Build and release output
+/build/
+/dist/
+/release/
+DerivedData/
+
+# Xcode user data
+*.xcuserstate
+xcuserdata/
+
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.mobileprovision
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*~
