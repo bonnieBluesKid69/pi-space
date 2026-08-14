@@ -143,7 +143,7 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     ["choice": "opus-5", "variant": "Claude Opus 5", "provider": "agentrouter", "providerLabel": "AgentRouter", "id": "claude-opus-5", "name": "claude-opus-5"],
     ["choice": "opus-5", "variant": "Claude Opus 5", "provider": "tabitoken", "providerLabel": "TabiToken", "id": "claude-opus-5", "name": "claude-opus-5"],
     ["choice": "opus-5-thinking", "variant": "Claude Opus 5 Thinking", "provider": "tabitoken", "providerLabel": "TabiToken", "id": "claude-opus-5-thinking", "name": "claude-opus-5-thinking"],
-    ["choice": "opus-4.8", "variant": "Claude Opus 4.8", "provider": "agentrouter", "providerLabel": "AgentRouter", "id": "claude-opus-4.8", "name": "claude-opus-4.8"],
+    ["choice": "opus-4.8", "variant": "Claude Opus 4.8", "provider": "agentrouter", "providerLabel": "AgentRouter", "id": "claude-opus-4-8", "name": "claude-opus-4-8"],
     ["choice": "opus-4.8", "variant": "Claude Opus 4.8", "provider": "tabitoken", "providerLabel": "TabiToken", "id": "claude-opus-4-8", "name": "claude-opus-4-8"],
     ["choice": "opus-4.8-thinking", "variant": "Claude Opus 4.8 Thinking", "provider": "tabitoken", "providerLabel": "TabiToken", "id": "claude-opus-4-8-thinking", "name": "claude-opus-4-8-thinking"],
     ["choice": "kimi-k3-free", "variant": "Kimi K3 Free", "provider": "tokenrouter", "providerLabel": "TokenRouter", "id": "moonshotai/kimi-k3-free", "name": "moonshotai/kimi-k3-free"],
@@ -321,6 +321,10 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
       ?? name
   }
   func chooseInitialModel() {
+    if selectedProvider == "agentrouter", selectedModel == "claude-opus-4.8" {
+      selectedModel = "claude-opus-4-8"
+      UserDefaults.standard.set(selectedModel, forKey: "PiSpaceModel")
+    }
     guard selectedProvider == nil || selectedModel == nil else { return }
     let config = readModelsConfig()
     if providerConfigured("agentrouter", config: config) {
