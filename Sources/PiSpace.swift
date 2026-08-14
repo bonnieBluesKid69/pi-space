@@ -370,6 +370,8 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
         "Version": "0.101.0",
       ]
       provider["compat"] = ["supportsDeveloperRole": false, "supportsReasoningEffort": false]
+    } else if name == "tabitoken" {
+      provider["compat"] = ["supportsFinishReason": false]
     }
     provider["models"] = managedModels.filter { $0["provider"] as? String == name }.map {
       let id = $0["id"] as! String
