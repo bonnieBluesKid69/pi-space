@@ -52,7 +52,7 @@ To include the optional voice listener:
 ./scripts/install.sh --with-wake-listener
 ```
 
-The listener asks for Microphone and Speech Recognition access when first opened. It runs in the menu bar and can be paused or quit from its menu.
+The listener asks for Microphone and Speech Recognition access when first opened. It runs in the menu bar. Click the menu-bar icon and use **Listening Enabled** to turn microphone recognition on or off; the setting persists across relaunches. When it is off, Wake Pi does not access the microphone or Speech Recognition service.
 
 ## Using Pi Space
 

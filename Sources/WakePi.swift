@@ -8,7 +8,8 @@ final class WakeListener: NSObject, NSApplicationDelegate, NSSpeechSynthesizerDe
   private var request: SFSpeechAudioBufferRecognitionRequest?
   private var task: SFSpeechRecognitionTask?
   private var statusItem: NSStatusItem!
-  private var paused = false
+  private let listeningPausedKey = "WakePiListeningPaused"
+  private var paused = UserDefaults.standard.bool(forKey: "WakePiListeningPaused")
   private var restartWork: DispatchWorkItem?
   private var recognitionGeneration = 0
   private var restartScheduledGeneration: Int?
@@ -38,21 +39,31 @@ final class WakeListener: NSObject, NSApplicationDelegate, NSSpeechSynthesizerDe
     DistributedNotificationCenter.default().addObserver(
       self, selector: #selector(receiveVoiceResponse(_:)), name: responseNotification, object: nil)
     buildMenu()
-    requestPermissions()
+    if paused {
+      NSLog("Wake Pi listening is disabled")
+      updateMenu("Listening is off")
+    } else {
+      requestPermissions()
+    }
   }
 
   private func buildMenu() {
     statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     statusItem.button?.image = NSImage(
-      systemSymbolName: "waveform.circle", accessibilityDescription: "Wake Pi Listener")
-    statusItem.button?.toolTip = "Wake Pi Listener"
+      systemSymbolName: paused ? "mic.slash.circle" : "waveform.circle",
+      accessibilityDescription: paused ? "Wake Pi Listener off" : "Wake Pi Listener on")
+    statusItem.button?.toolTip = paused ? "Wake Pi is not listening" : "Wake Pi is listening"
     updateMenu("Waiting for permission…")
   }
 
   private func updateMenu(_ state: String) {
+    statusItem.button?.image = NSImage(
+      systemSymbolName: paused ? "mic.slash.circle" : "waveform.circle",
+      accessibilityDescription: paused ? "Wake Pi Listener off" : "Wake Pi Listener on")
+    statusItem.button?.toolTip = paused ? "Wake Pi is not listening" : "Wake Pi is listening"
     let menu = NSMenu()
     let status = NSMenuItem(
-      title: voiceMode == .dictation ? "Dictating… say send it or cancel" : state,
+      title: paused ? "Microphone is off" : (voiceMode == .dictation ? "Dictating… say send it or cancel" : state),
       action: nil, keyEquivalent: "")
     status.isEnabled = false
     menu.addItem(status)
@@ -67,9 +78,9 @@ final class WakeListener: NSObject, NSApplicationDelegate, NSSpeechSynthesizerDe
       menu.addItem(cancel)
     }
     let toggle = NSMenuItem(
-      title: paused ? "Resume Listening" : "Pause Listening", action: #selector(toggleListening),
-      keyEquivalent: "")
+      title: "Listening Enabled", action: #selector(toggleListening), keyEquivalent: "")
     toggle.target = self
+    toggle.state = paused ? .off : .on
     menu.addItem(toggle)
     menu.addItem(.separator())
     let quit = NSMenuItem(title: "Quit Wake Listener", action: #selector(quit), keyEquivalent: "q")
@@ -321,12 +332,20 @@ final class WakeListener: NSObject, NSApplicationDelegate, NSSpeechSynthesizerDe
 
   @objc private func toggleListening() {
     paused.toggle()
+    UserDefaults.standard.set(paused, forKey: listeningPausedKey)
     restartWork?.cancel()
     if paused {
+      voiceMode = .wakeWord
+      dictatedText = ""
+      voiceResponsePending = false
+      speaker.stopSpeaking()
       stopRecognition()
-      updateMenu("Listening paused")
+      NSLog("Wake Pi listening disabled")
+      updateMenu("Listening is off")
     } else {
-      startListening()
+      NSLog("Wake Pi listening enabled")
+      updateMenu("Starting listener…")
+      requestPermissions()
     }
   }
 
