@@ -54,6 +54,18 @@ To include the optional voice listener:
 
 The listener asks for Microphone and Speech Recognition access when first opened. It runs in the menu bar. Click the menu-bar icon and use **Listening Enabled** to turn microphone recognition on or off; the setting persists across relaunches. When it is off, Wake Pi does not access the microphone or Speech Recognition service.
 
+## Updating
+
+From the existing Pi Space Git checkout, run:
+
+```bash
+./scripts/update.sh
+```
+
+The updater checks GitHub, fast-forwards to the latest `main` branch, rebuilds Pi Space, and reinstalls it. If Wake Pi Listener is already installed, it is updated and reloaded as a single LaunchAgent-managed process while retaining its **Listening Enabled** preference.
+
+Use `./scripts/update.sh --check` to check for a new version without installing it. The updater refuses to overwrite uncommitted changes, local commits, or divergent Git history.
+
 ## Using Pi Space
 
 1. Open **Workspace**, choose the project folder you want to work in, and click **Apply**.
