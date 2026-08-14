@@ -49,7 +49,7 @@ final class RPC {
     return lines.map(String.init).last(where: { fileManager.isExecutableFile(atPath: $0) })
   }
 
-  func start(_ cwd: String, continuing: Bool = false) {
+  func start(_ cwd: String, continuing: Bool = false, provider: String? = nil, model: String? = nil) {
     stop()
     let p = Process()
     let i = Pipe()
@@ -61,6 +61,8 @@ final class RPC {
     }
     p.executableURL = URL(fileURLWithPath: pi)
     p.arguments = ["--mode", "rpc"] + (continuing ? ["-c"] : [])
+      + (provider.map { ["--provider", $0] } ?? [])
+      + (model.map { ["--model", $0] } ?? [])
     var environment = ProcessInfo.processInfo.environment
     let piDirectory = URL(fileURLWithPath: pi).deletingLastPathComponent().path
     let inheritedPath = environment["PATH"] ?? ""
@@ -123,6 +125,16 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
   var queue = [[String: Any]]()
   var files = [URL]()
   var cwd = NSHomeDirectory()
+  var selectedProvider = UserDefaults.standard.string(forKey: "PiSpaceProvider")
+  var selectedModel = UserDefaults.standard.string(forKey: "PiSpaceModel")
+  var pendingModel: (provider: String, model: String)?
+  let modelsURL = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".pi/agent/models.json")
+  let managedModels: [[String: Any]] = [
+    ["provider": "agentrouter", "id": "gpt-5.6-sol", "name": "gpt-5.6-sol", "label": "gpt-5.6-sol (AgentRouter)"],
+    ["provider": "agentrouter", "id": "claude-opus-5", "name": "claude-opus-5", "label": "claude-opus-5 (AgentRouter)"],
+    ["provider": "agentrouter", "id": "claude-opus-4.8", "name": "claude-opus-4.8", "label": "claude-opus-4.8 (AgentRouter)"],
+    ["provider": "tokenrouter", "id": "moonshotai/kimi-k3-free", "name": "moonshotai/kimi-k3-free", "label": "moonshotai/kimi-k3-free (TokenRouter)"],
+  ]
   let instructionsURL = URL(fileURLWithPath: NSHomeDirectory())
     .appendingPathComponent(".pi/agent/pi-space-instructions.txt")
   func instructions() -> String {
@@ -175,7 +187,10 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     queue.removeAll()
     js("workspaceChosen", ["path": cwd])
     js("instructionsLoaded", ["text": instructions()])
-    rpc.start(cwd, continuing: false)
+    ensureManagedModels()
+    chooseInitialModel()
+    syncProviderSettings()
+    rpc.start(cwd, continuing: false, provider: selectedProvider, model: selectedModel)
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in self?.refresh() }
   }
   func userContentController(_ u: WKUserContentController, didReceive m: WKScriptMessage) {
@@ -247,9 +262,13 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     case "chooseWorkspace": choose()
     case "applyWorkspace": if let p = b["path"] as? String { apply(p) }
     case "setModel":
-      if let p = b["provider"] as? String, let id = b["model"] as? String {
-        rpc.send(["type": "set_model", "provider": p, "modelId": id])
+      if let provider = b["provider"] as? String, let model = b["model"] as? String {
+        selectModel(provider: provider, model: model)
       }
+    case "saveProviderKeys":
+      saveProviderKeys(
+        agentRouterKey: b["agentRouterKey"] as? String,
+        tokenRouterKey: b["tokenRouterKey"] as? String)
     case "saveInstructions":
       if let text = b["text"] as? String { saveInstructions(text) }
     case "setThinking":
@@ -262,6 +281,144 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
       rpc.send(response)
     default: break
     }
+  }
+  func readModelsConfig() -> [String: Any] {
+    guard let data = try? Data(contentsOf: modelsURL),
+      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else { return ["providers": [String: Any]()] }
+    return object
+  }
+  func providerConfigured(_ name: String, config: [String: Any]) -> Bool {
+    guard let providers = config["providers"] as? [String: Any],
+      let provider = providers[name] as? [String: Any]
+    else { return false }
+    return ((provider["apiKey"] as? String)?.isEmpty == false)
+  }
+  func chooseInitialModel() {
+    guard selectedProvider == nil || selectedModel == nil else { return }
+    let config = readModelsConfig()
+    if providerConfigured("agentrouter", config: config) {
+      selectedProvider = "agentrouter"
+      selectedModel = "gpt-5.6-sol"
+    } else if providerConfigured("tokenrouter", config: config) {
+      selectedProvider = "tokenrouter"
+      selectedModel = "moonshotai/kimi-k3-free"
+    } else { return }
+    UserDefaults.standard.set(selectedProvider, forKey: "PiSpaceProvider")
+    UserDefaults.standard.set(selectedModel, forKey: "PiSpaceModel")
+  }
+  func syncProviderSettings(message: String? = nil, success: Bool = true) {
+    let config = readModelsConfig()
+    var payload: [String: Any] = [
+      "models": managedModels,
+      "agentRouterConfigured": providerConfigured("agentrouter", config: config),
+      "tokenRouterConfigured": providerConfigured("tokenrouter", config: config),
+      "selectedProvider": selectedProvider ?? "",
+      "selectedModel": selectedModel ?? "",
+      "success": success,
+    ]
+    if let message { payload["message"] = message }
+    js("providerSettingsLoaded", payload)
+  }
+  func managedProvider(existing: [String: Any]?, name: String, key: String?) -> [String: Any] {
+    var provider = existing ?? [:]
+    let isAgentRouter = name == "agentrouter"
+    provider["baseUrl"] = isAgentRouter ? "https://agentrouter.org/v1" : "https://api.tokenrouter.io/v1"
+    provider["api"] = "openai-completions"
+    provider["authHeader"] = true
+    if let key, !key.isEmpty { provider["apiKey"] = key }
+    if isAgentRouter {
+      provider["headers"] = [
+        "Originator": "codex_cli_rs", "User-Agent": "codex_cli_rs/0.101.0 (Pi Space; macOS)",
+        "Version": "0.101.0",
+      ]
+      provider["compat"] = ["supportsDeveloperRole": false, "supportsReasoningEffort": false]
+      provider["models"] = managedModels.filter { $0["provider"] as? String == name }.map {
+        [
+          "id": $0["id"]!, "name": $0["name"]!, "reasoning": true,
+          "input": ["text", "image"], "contextWindow": 128_000, "maxTokens": 16_384,
+        ]
+      }
+    } else {
+      provider["models"] = managedModels.filter { $0["provider"] as? String == name }.map {
+        [
+          "id": $0["id"]!, "name": $0["name"]!, "reasoning": true,
+          "input": ["text", "image"], "contextWindow": 200_000, "maxTokens": 32_768,
+        ]
+      }
+    }
+    return provider
+  }
+  func writeModelsConfig(_ config: [String: Any], createBackup: Bool = true) throws {
+    try FileManager.default.createDirectory(
+      at: modelsURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+    if createBackup, FileManager.default.fileExists(atPath: modelsURL.path) {
+      let backup = modelsURL.appendingPathExtension("backup")
+      try? FileManager.default.removeItem(at: backup)
+      try FileManager.default.copyItem(at: modelsURL, to: backup)
+    }
+    let data = try JSONSerialization.data(withJSONObject: config, options: [.prettyPrinted, .sortedKeys])
+    try data.write(to: modelsURL, options: .atomic)
+    try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: modelsURL.path)
+  }
+  func ensureManagedModels() {
+    var config = readModelsConfig()
+    var providers = config["providers"] as? [String: Any] ?? [:]
+    providers["agentrouter"] = managedProvider(
+      existing: providers["agentrouter"] as? [String: Any], name: "agentrouter", key: nil)
+    providers["tokenrouter"] = managedProvider(
+      existing: providers["tokenrouter"] as? [String: Any], name: "tokenrouter", key: nil)
+    config["providers"] = providers
+    do {
+      try writeModelsConfig(config)
+    } catch {
+      syncProviderSettings(message: "Could not update models.json: \(error.localizedDescription)", success: false)
+    }
+  }
+  func saveProviderKeys(agentRouterKey: String?, tokenRouterKey: String?) {
+    let agentKey = agentRouterKey?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let tokenKey = tokenRouterKey?.trimmingCharacters(in: .whitespacesAndNewlines)
+    if let agentKey, !agentKey.isEmpty, !agentKey.hasPrefix("sk-") {
+      syncProviderSettings(message: "AgentRouter keys must begin with sk-.", success: false)
+      return
+    }
+    if let tokenKey, !tokenKey.isEmpty, !tokenKey.hasPrefix("tr_") {
+      syncProviderSettings(message: "TokenRouter keys must begin with tr_.", success: false)
+      return
+    }
+    var config = readModelsConfig()
+    var providers = config["providers"] as? [String: Any] ?? [:]
+    providers["agentrouter"] = managedProvider(
+      existing: providers["agentrouter"] as? [String: Any], name: "agentrouter", key: agentKey)
+    providers["tokenrouter"] = managedProvider(
+      existing: providers["tokenrouter"] as? [String: Any], name: "tokenrouter", key: tokenKey)
+    config["providers"] = providers
+    do {
+      try writeModelsConfig(config)
+      syncProviderSettings(message: "Provider configuration saved.")
+      rpc.start(cwd, continuing: true, provider: selectedProvider, model: selectedModel)
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { [weak self] in self?.refresh() }
+    } catch {
+      syncProviderSettings(message: "Could not save models.json: \(error.localizedDescription)", success: false)
+    }
+  }
+  func selectModel(provider: String, model: String) {
+    guard managedModels.contains(where: {
+      $0["provider"] as? String == provider && $0["id"] as? String == model
+    }) else {
+      syncProviderSettings(message: "That model is not managed by Pi Space.", success: false)
+      return
+    }
+    let config = readModelsConfig()
+    guard providerConfigured(provider, config: config) else {
+      syncProviderSettings(
+        message: "Save the \(provider == "agentrouter" ? "AgentRouter" : "TokenRouter") API key first.",
+        success: false)
+      return
+    }
+    pendingModel = (provider, model)
+    rpc.send(["type": "set_model", "provider": provider, "modelId": model])
+    syncProviderSettings(message: "Switching to \(model)...")
   }
   func chooseAttachments() {
     let panel = NSOpenPanel()
@@ -417,7 +574,7 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     }
     cwd = p
     js("workspaceRestarting", ["path": p])
-    rpc.start(p, continuing: false)
+    rpc.start(cwd, continuing: false, provider: selectedProvider, model: selectedModel)
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { [weak self] in self?.refresh() }
   }
   func forward(_ x: [String: Any]) {
@@ -426,6 +583,13 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
       return
     }
     js("rpcEvent", x)
+    if x["type"] as? String == "response", x["command"] as? String == "set_model",
+      x["success"] as? Bool == false
+    {
+      pendingModel = nil
+      syncProviderSettings(message: x["error"] as? String ?? "Model switch failed.", success: false)
+      return
+    }
     guard x["type"] as? String == "response", x["success"] as? Bool != false,
       let command = x["command"] as? String
     else { return }
@@ -442,6 +606,14 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
         rpc.send(["type": "get_state"])
       }
     } else if ["set_model", "set_thinking_level"].contains(command) {
+      if command == "set_model", let pending = pendingModel {
+        selectedProvider = pending.provider
+        selectedModel = pending.model
+        UserDefaults.standard.set(pending.provider, forKey: "PiSpaceProvider")
+        UserDefaults.standard.set(pending.model, forKey: "PiSpaceModel")
+        pendingModel = nil
+        syncProviderSettings(message: "Active model: \(pending.model)")
+      }
       rpc.send(["type": "get_state"])
       rpc.send(["type": "get_available_thinking_levels"])
     }
