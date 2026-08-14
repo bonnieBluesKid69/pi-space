@@ -2,8 +2,145 @@
 :root{color-scheme:dark;--bg:#0b0f12;--side:#080b0d;--panel:#11181c;--line:#28343a;--text:#e8edef;--muted:#819097;--cyan:#57d2df;--green:#62d39a;--red:#ff7c84}*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;min-width:0;min-height:0;overflow:hidden;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif}button,input,textarea,select{font:inherit}.app{position:fixed;inset:0;display:grid;grid-template-columns:210px minmax(0,1fr);overflow:hidden}.side{min-width:0;min-height:0;overflow:hidden;background:var(--side);border-right:1px solid #1b2428;padding:27px 14px 17px;display:flex;flex-direction:column}.brand{padding:0 10px 27px;display:flex;gap:10px;align-items:center}.logo{width:32px;height:32px;border:1px solid #31545c;border-radius:7px;display:grid;place-items:center;color:var(--cyan);font:600 19px Georgia}.brand b{font-size:14px}.brand small{display:block;color:var(--muted);font-size:9px;margin-top:3px}.nav{height:39px;flex:0 0 39px;border:0;border-radius:6px;background:transparent;color:var(--muted);text-align:left;padding:0 12px;cursor:pointer}.nav:hover{color:var(--text);background:#10171a}.nav.active{color:var(--cyan);background:#142126}.foot{margin-top:auto;padding:10px;color:var(--muted);font-size:10px}.status{color:var(--green);font-weight:700;font-size:9px;margin-bottom:6px}.main{width:100%;height:100%;min-width:0;min-height:0;overflow:hidden}.view{width:100%;height:100%;min-width:0;min-height:0;overflow:hidden}.view{display:none}.view.active{display:flex}.chat{flex-direction:column;min-height:0}.top{height:70px;flex:0 0 70px;border-bottom:1px solid #1d282d;padding:0 28px;display:flex;align-items:center}.top h1,.page h1{margin:0;font-size:18px}.top p,.pagehead p{margin:4px 0 0;color:var(--muted);font-size:10px}.meta{margin-left:auto;color:var(--muted);font-size:10px;display:flex;gap:10px;align-items:center}.dot{width:7px;height:7px;border-radius:50%;background:var(--green)}.dot.work{background:var(--cyan);animation:pulse 1s infinite}.dot.error{background:var(--red)}@keyframes pulse{50%{opacity:.25}}.feed{flex:1 1 0;min-height:0;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;padding:26px max(28px,calc((100% - 820px)/2));scroll-behavior:smooth;-webkit-overflow-scrolling:touch}.empty{min-height:100%;display:grid;place-items:center;text-align:center;color:var(--muted)}.empty h2{font-size:17px;color:var(--text);margin:0 0 7px}.empty p{font-size:12px;margin:0}.orb{width:68px;height:42px;border:1px solid #31515a;border-radius:50%;margin:0 auto 18px;display:grid;place-items:center}.orb:after{content:"";width:12px;height:12px;background:var(--cyan);border-radius:50%;box-shadow:0 0 15px #57d2df66}.msg{margin-bottom:22px}.who{font-size:9px;font-weight:700;color:var(--green);margin-bottom:7px}.user{margin-left:14%}.user .who{color:var(--cyan)}.body{font-size:13px;line-height:1.62;white-space:pre-wrap;word-break:break-word}.user .body{padding:12px 14px;background:#132328;border:1px solid #254149;border-radius:7px}.typing{display:inline-flex;gap:4px}.typing i{width:5px;height:5px;border-radius:50%;background:var(--cyan);animation:pulse 1s infinite}.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
 .thinkingpanel{border:1px solid #294149;background:#0d171b;border-radius:7px;margin:0 0 18px;overflow:hidden}.thinkinghead{height:38px;padding:0 12px;display:flex;align-items:center;gap:9px;color:var(--cyan);font-size:10px;font-weight:700;cursor:pointer}.thinkinghead .spin{width:7px;height:7px;border-radius:50%;background:var(--cyan);animation:pulse 1s infinite}.thinkingpanel.done .spin{background:var(--green);animation:none}.thinkingbody{border-top:1px solid #24363d;padding:11px 13px;max-height:210px;overflow:auto;color:#a8b8be;font:11px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;word-break:break-word}.thinkingpanel.collapsed .thinkingbody{display:none}.thinkingpanel.done .thinkinghead{color:var(--green)}
 .tool{border:1px solid var(--line);background:#0e1518;border-radius:7px;margin:10px 0 19px;overflow:hidden}.tool.ok{border-color:#28523e}.tool.fail{border-color:#66343a}.toolhead{height:40px;padding:0 12px;display:flex;align-items:center;gap:9px;cursor:pointer}.state{width:7px;height:7px;border-radius:50%;background:var(--cyan)}.ok .state{background:var(--green)}.fail .state{background:var(--red)}.toolname{font-size:11px;font-weight:650}.summary{margin-left:auto;color:var(--muted);font-size:10px}.toolbody{display:block;border-top:1px solid var(--line);font:11px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;max-height:350px;overflow:auto}.collapsed .toolbody{display:none}.section{padding:11px 13px;border-bottom:1px solid #202b30}.section:last-child{border:0}.label{display:block;color:#73838a;font:700 9px -apple-system,sans-serif;margin-bottom:7px}.terminal{margin:0;white-space:pre-wrap;color:#d5dddf}.path{color:var(--cyan);word-break:break-all}.removed,.added{display:block;white-space:pre-wrap;padding:2px 8px}.removed{background:#321b20;color:#ffafb5}.added{background:#173024;color:#9ce5bc}.errorbox{padding:12px 14px;border:1px solid #63343a;background:#26171a;color:#ffdadd;border-radius:7px;font-size:11px;margin-bottom:17px}.composerwrap{flex:0 0 auto;position:relative;z-index:5;padding:12px max(28px,calc((100% - 820px)/2)) 21px;background:linear-gradient(180deg,transparent 0,var(--bg) 18px)}.composer{border:1px solid #304148;background:#11191d;border-radius:8px;padding:10px}.composer:focus-within{border-color:#47727a;box-shadow:0 0 0 3px #57d2df0d}.composer textarea{display:block;width:100%;height:58px;resize:none;border:0;outline:0;background:transparent;color:var(--text);font-size:13px;line-height:1.5}.bar{display:flex;align-items:center;height:32px;color:var(--muted);font-size:9px}.send,.stop{margin-left:auto;width:32px;height:32px;border-radius:50%;cursor:pointer}.send{border:0;background:var(--cyan);color:#071013;font-size:18px}.stop{display:none;border:1px solid #66343a;background:#29171a;color:var(--red)}.stop.show{display:grid;place-items:center}.stop:after{content:"";width:9px;height:9px;background:currentColor}.page{flex-direction:column;padding:32px;overflow:auto}.page h1{font-size:23px}.pagehead{margin-bottom:25px}.card,.sessions{max-width:760px;border:1px solid var(--line);background:var(--panel);border-radius:7px}.card{padding:18px;margin-bottom:13px}.row{display:flex;gap:10px;align-items:center}.field{height:36px;background:#0c1215;color:var(--text);border:1px solid #304148;border-radius:6px;padding:0 11px}.grow{flex:1}.btn{height:35px;padding:0 13px;border:1px solid #3a4c53;background:#172126;color:var(--text);border-radius:6px;cursor:pointer}.btn.primary{color:#c1eff3;border-color:#2d6872;background:#163037}.setting{display:grid;grid-template-columns:130px 1fr;align-items:center;margin-bottom:14px}.session{padding:13px 15px;border-bottom:1px solid #202b30;display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"title date" "summary date";column-gap:18px;row-gap:5px;cursor:pointer}.session:last-child{border:0}.session:hover{background:#162025}.session b{grid-area:title;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.session small{grid-area:summary;color:var(--muted);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.session span{grid-area:date;align-self:center;color:var(--muted);font-size:10px}.instructionbox{display:block;width:100%;min-height:150px;resize:vertical;background:#0c1215;color:var(--text);border:1px solid #304148;border-radius:6px;padding:12px;outline:0;line-height:1.5}.instructionbox:focus{border-color:#47727a;box-shadow:0 0 0 3px #57d2df0d}.saved{color:var(--green);font-size:10px;opacity:0;transition:opacity .2s}.saved.show{opacity:1}
-</style></head><body><div class="app"><aside class="side"><div class="brand"><div class="logo">pi</div><div><b>Pi Space</b><small>NATIVE AI WORKSPACE</small></div></div><button class="nav active" data-view="chat">Chat</button><button class="nav" data-view="sessions">Sessions</button><button class="nav" data-view="workspace">Workspace</button><button class="nav" data-view="settings">Settings</button><div class="foot"><div class="status" id="status">● PI ONLINE</div><div>Embedded RPC · Local tools</div></div></aside><main class="main">
-<section id="view-chat" class="view chat active"><header class="top"><div><h1>Pi Chat</h1><p id="workspaceMeta">Home workspace</p></div><div class="meta"><button id="newChat" class="btn primary">New Chat</button><span id="modelMeta">Connecting...</span><i id="dot" class="dot"></i></div></header><div id="feed" class="feed"><div id="empty" class="empty"><div><div class="orb"></div><h2>What are we working on?</h2><p>Ask Pi to inspect, run, edit, or build something.</p></div></div></div><div class="composerwrap"><div class="composer"><textarea id="prompt" placeholder="Message Pi..." autofocus></textarea><div class="bar"><span>Return to send · Shift Return for a new line</span><button id="stop" class="stop" title="Stop"></button><button id="send" class="send" title="Send">↑</button></div></div></div></section>
+</style><style>
+/* Pi Space interface system */
+:root{
+  color-scheme:dark;
+  --bg:#090b0d;
+  --side:#0d1013;
+  --surface:#111519;
+  --surface-2:#151a1f;
+  --surface-3:#1a2025;
+  --line:#242b31;
+  --line-strong:#343e46;
+  --text:#f2f4f5;
+  --muted:#89939b;
+  --faint:#59636b;
+  --accent:#7ce5df;
+  --accent-dim:#152c2d;
+  --green:#75d6a4;
+  --red:#ff858e;
+  --radius:6px;
+}
+*{letter-spacing:0}
+html,body{background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif}
+button,input,textarea,select{letter-spacing:0}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.app{grid-template-columns:192px minmax(0,1fr);background:var(--bg)}
+.side{position:relative;background:var(--side);border-right:1px solid var(--line);padding:24px 12px 16px}
+.side:after{content:"";position:absolute;top:0;right:-1px;width:1px;height:140px;background:var(--accent);opacity:.28}
+.brand{height:48px;padding:0 8px 16px;margin-bottom:18px;gap:11px;border-bottom:1px solid var(--line)}
+.logo{position:relative;width:30px;height:30px;border:1px solid var(--line-strong);border-radius:5px;background:#12171a;color:var(--accent);font:500 18px/1 Georgia,serif;box-shadow:inset 0 0 0 1px #7ce5df0a}
+.logo:after{content:"";position:absolute;width:4px;height:4px;right:-2px;top:-2px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px #7ce5df88}
+.brand b{font-size:13px;font-weight:630;color:var(--text)}
+.brand small{margin-top:2px;color:var(--faint);font-size:8px;font-weight:600;text-transform:uppercase}
+.nav{position:relative;height:38px;flex:0 0 38px;margin:2px 0;border-radius:5px;padding:0 10px 0 35px;color:#8f999f;font-size:11px;font-weight:510;transition:background .16s,color .16s}
+.nav:before{position:absolute;left:11px;top:50%;width:14px;transform:translateY(-50%);color:var(--faint);font-size:13px;text-align:center}
+.nav[data-view="chat"]:before{content:"◇"}.nav[data-view="sessions"]:before{content:"≡"}.nav[data-view="workspace"]:before{content:"⌁"}.nav[data-view="settings"]:before{content:"⚙";font-size:12px}
+.nav:hover{color:var(--text);background:#151a1e}
+.nav.active{color:var(--text);background:#171d21}
+.nav.active:before{color:var(--accent)}
+.nav.active:after{content:"";position:absolute;left:-12px;top:11px;width:2px;height:16px;background:var(--accent)}
+.foot{padding:12px 9px 2px;border-top:1px solid var(--line);font-size:9px;line-height:1.6;color:var(--faint)}
+.status{display:flex;align-items:center;gap:7px;margin-bottom:3px;color:var(--green);font-size:8px;font-weight:650;text-transform:uppercase}
+.status:before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor}
+.main{background:var(--bg)}
+.top{height:72px;flex-basis:72px;padding:0 32px;border-bottom:1px solid var(--line);background:#0b0e10}
+.top h1,.page h1{font-size:15px;font-weight:610;color:var(--text)}
+.top p,.pagehead p{margin-top:5px;font-size:9px;color:var(--faint)}
+.meta{gap:13px;font-size:9px;color:var(--muted)}
+#modelMeta{max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dot{width:5px;height:5px;order:-1;background:var(--green);box-shadow:0 0 8px #75d6a466}
+.dot.work{background:var(--accent);box-shadow:0 0 8px #7ce5df77}
+.dot.error{background:var(--red);box-shadow:0 0 8px #ff858e77}
+.feed{padding:30px max(34px,calc((100% - 760px)/2)) 12px;scrollbar-color:#303940 transparent;scrollbar-width:thin}
+.empty{min-height:100%;place-items:center;color:var(--muted)}
+.empty h2{margin:20px 0 7px;font-size:19px;font-weight:530;color:var(--text)}
+.empty p{font-size:11px;color:var(--faint)}
+.orb{display:none}
+.emptyMark{position:relative;width:44px;height:44px;margin:0 auto;border:1px solid var(--line-strong);border-radius:6px;background:var(--surface)}
+.emptyMark:before,.emptyMark:after{content:"";position:absolute;background:var(--accent);opacity:.9}
+.emptyMark:before{width:14px;height:1px;left:14px;top:21px}.emptyMark:after{width:1px;height:14px;left:21px;top:14px}
+.emptyMark i{position:absolute;inset:8px;border:1px solid #7ce5df35;border-radius:3px}
+.msg{margin:0 0 30px}
+.who{margin-bottom:9px;color:var(--green);font-size:8px;font-weight:700;text-transform:uppercase}
+.user{margin-left:22%;padding-left:0}
+.user .who{color:var(--accent)}
+.body{font-size:13px;line-height:1.7;color:#dfe4e6}
+.assistant .body{padding-right:18px}
+.user .body{padding:13px 15px;border:1px solid var(--line);border-radius:6px;background:var(--surface-2);color:var(--text)}
+.typing{gap:5px;padding:5px 0}
+.typing i{width:4px;height:4px;background:var(--accent)}
+.thinkingpanel,.tool{border:1px solid var(--line);border-radius:6px;background:var(--surface);box-shadow:none}
+.thinkingpanel{margin:0 0 24px}
+.thinkinghead,.toolhead{height:38px;padding:0 12px;gap:10px}
+.thinkinghead{color:var(--accent);font-size:9px;font-weight:650;text-transform:uppercase}
+.thinkinghead .spin,.state{width:5px;height:5px;box-shadow:0 0 7px currentColor}
+.thinkingpanel.done .thinkinghead{color:var(--green)}
+.thinkingbody,.toolbody{border-top:1px solid var(--line);background:#0d1114;color:#aeb8bd;font:10px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace}
+.thinkingbody{padding:13px 14px;max-height:230px}
+.tool{margin:10px 0 24px}
+.tool.ok{border-color:#284638}.tool.fail{border-color:#5d3036}
+.state{background:var(--accent)}.ok .state{background:var(--green)}.fail .state{background:var(--red)}
+.toolname{font-size:10px;font-weight:650;text-transform:lowercase}
+.summary{font-size:9px;color:var(--faint)}
+.section{padding:12px 14px;border-bottom:1px solid #20262b}
+.label{margin-bottom:8px;color:#6f7a82;font-size:8px;font-weight:700;text-transform:uppercase}
+.path{color:var(--accent)}
+.terminal{color:#ccd3d6}
+.errorbox{margin-bottom:22px;padding:12px 14px;border-color:#593138;border-radius:6px;background:#211316;color:#ffccd0;font-size:10px}
+.composerwrap{padding:12px max(34px,calc((100% - 760px)/2)) 22px;background:var(--bg)}
+.composer{padding:10px 10px 8px;border:1px solid var(--line-strong);border-radius:7px;background:var(--surface);box-shadow:0 8px 30px #00000028;transition:border-color .16s,background .16s}
+.composer:focus-within{border-color:#52777a;background:#13191c;box-shadow:0 8px 30px #00000028,0 0 0 2px #7ce5df0b}
+.composer textarea{height:56px;padding:1px 3px;color:var(--text);font-size:12px;line-height:1.55}
+.composer textarea::placeholder{color:#626d74}
+.bar{height:30px;font-size:8px;color:var(--faint)}
+.send,.stop{display:grid;place-items:center;width:29px;height:29px;border-radius:5px}
+.send{border:1px solid #8cebe5;background:var(--accent);color:#071112;font-size:15px;font-weight:600}
+.send:hover{background:#a1f0eb}.send:active{transform:translateY(1px)}
+.stop{border-color:#6c343a;background:#271619;color:var(--red)}
+.stop.show{display:grid}
+.stop:after{width:7px;height:7px;border-radius:1px}
+.page{padding:36px max(36px,calc((100% - 760px)/2));background:var(--bg)}
+.page h1{font-size:20px;font-weight:570}
+.pagehead{margin-bottom:26px;padding-bottom:20px;border-bottom:1px solid var(--line)}
+.pagehead p{font-size:10px}
+.card,.sessions{width:100%;max-width:none;border:1px solid var(--line);border-radius:6px;background:var(--surface)}
+.card{padding:19px;margin-bottom:12px}
+.row{gap:8px}
+.field{height:34px;border:1px solid var(--line-strong);border-radius:5px;background:#0d1114;color:var(--text);padding:0 10px;font-size:10px}
+.btn{height:32px;padding:0 11px;border:1px solid var(--line-strong);border-radius:5px;background:var(--surface-2);color:#d9dfe1;font-size:9px;font-weight:600;white-space:nowrap}
+.btn:hover{border-color:#4b5860;background:var(--surface-3);color:var(--text)}
+.btn.primary{border-color:#366365;background:var(--accent-dim);color:#b8f1ed}
+.btn.primary:hover{border-color:#4b8182;background:#193536}
+.setting{grid-template-columns:120px minmax(0,1fr);min-height:48px;margin:0;border-bottom:1px solid var(--line);align-items:center}
+.setting:last-child{border:0}
+.setting>.label{margin:0}
+.setting .field{width:100%}
+.session{padding:14px 16px;border-color:var(--line);row-gap:5px}
+.session:hover{background:var(--surface-2)}
+.session b{font-size:10px;font-weight:610}.session small,.session span{font-size:9px;color:var(--faint)}
+.instructionbox{min-height:156px;border:1px solid var(--line-strong);border-radius:5px;background:#0d1114;color:var(--text);padding:12px;font-size:11px}
+.instructionbox:focus{border-color:#52777a;box-shadow:0 0 0 2px #7ce5df0b}
+.saved,.hint{font-size:9px;color:var(--green)}
+.hint{margin-top:11px;color:var(--faint);line-height:1.5}
+@media(max-width:860px){
+  .app{grid-template-columns:64px minmax(0,1fr)}
+  .side{padding:22px 9px 14px;align-items:center}
+  .brand{width:100%;padding:0 0 16px;justify-content:center}.brand>div:last-child{display:none}
+  .nav{width:42px;padding:0;font-size:0}.nav:before{left:14px;font-size:14px}.nav.active:after{left:-11px}
+  .foot{width:100%;padding:11px 0 0;text-align:center}.foot>div:last-child{display:none}.status{justify-content:center;font-size:0}.status:before{width:6px;height:6px}
+  .top{padding:0 22px}.feed{padding-left:24px;padding-right:24px}.composerwrap{padding-left:24px;padding-right:24px}.page{padding-left:28px;padding-right:28px}
+  #modelMeta{max-width:130px}.meta{gap:9px}
+}
+@media(max-width:650px){
+  .top h1{font-size:13px}.top p{max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #modelMeta{display:none}.user{margin-left:10%}.bar>span{display:none}
+  .page{padding:28px 20px}.row{flex-wrap:wrap}.row .grow{min-width:100%}.setting{grid-template-columns:90px 1fr}
+  .session{grid-template-areas:"title" "summary" "date";grid-template-columns:1fr}.session span{margin-top:2px}
+}
+</style></head><body><div class="app"><aside class="side"><div class="brand"><div class="logo">π</div><div><b>Pi Space</b><small>LOCAL AGENT</small></div></div><button class="nav active" data-view="chat">Chat</button><button class="nav" data-view="sessions">Sessions</button><button class="nav" data-view="workspace">Workspace</button><button class="nav" data-view="settings">Settings</button><div class="foot"><div class="status" id="status">PI ONLINE</div><div>Local RPC · macOS</div></div></aside><main class="main">
+<section id="view-chat" class="view chat active"><header class="top"><div><h1>Pi Space</h1><p id="workspaceMeta">Home workspace</p></div><div class="meta"><button id="newChat" class="btn primary">New chat</button><span id="modelMeta">Connecting...</span><i id="dot" class="dot"></i></div></header><div id="feed" class="feed"><div id="empty" class="empty"><div><div class="emptyMark"><i></i></div><h2>Ready when you are.</h2><p>Ask Pi to inspect, edit, run, or build.</p></div></div></div><div class="composerwrap"><div class="composer"><textarea id="prompt" placeholder="Message Pi..." autofocus></textarea><div class="bar"><span>Return to send · Shift Return for a new line</span><button id="stop" class="stop" title="Stop"></button><button id="send" class="send" title="Send">↑</button></div></div></div></section>
 <section id="view-sessions" class="view page"><div class="pagehead"><h1>Sessions</h1><p>Continue an earlier Pi conversation.</p></div><div id="sessions" class="sessions"><div class="session"><b>Loading...</b></div></div></section>
 <section id="view-workspace" class="view page"><div class="pagehead"><h1>Workspace</h1><p>Choose the folder Pi starts in. This is not a sandbox.</p></div><div class="card"><span class="label">CURRENT FOLDER</span><div class="row"><input id="workspace" class="field grow"><button id="choose" class="btn">Choose</button><button id="apply" class="btn primary">Apply</button></div><div class="hint">Applying starts a fresh Pi process in that folder.</div></div></section>
 <section id="view-settings" class="view page"><div class="pagehead"><h1>Settings</h1><p>Control Pi's behavior, active model, and reasoning level.</p></div><div class="card"><span class="label">CUSTOM INSTRUCTIONS</span><textarea id="instructions" class="instructionbox" placeholder="Example: Speak like an Australian bogan. Keep answers direct and practical."></textarea><div class="row" style="margin-top:12px"><button id="saveInstructions" class="btn primary">Save Instructions</button><span id="instructionsSaved" class="saved">Saved — these apply to every new message.</span></div><div class="hint">Stored locally on this Mac. Leave blank to use Pi's normal style.</div></div><div class="card"><div class="setting"><span class="label">MODEL</span><select id="models" class="field"></select></div><div class="setting"><span class="label">THINKING</span><select id="thinking" class="field"></select></div><div class="setting"><span class="label">SESSION</span><span id="sessionMeta">Loading...</span></div></div><div class="row"><button id="new" class="btn primary">New Session</button><button id="refresh" class="btn">Refresh</button></div></section></main></div>
@@ -12,17 +149,17 @@ const $=id=>document.getElementById(id),bridge=(action,data={})=>webkit.messageH
 document.querySelectorAll('.nav').forEach(n=>n.onclick=()=>{document.querySelectorAll('.nav').forEach(x=>x.classList.toggle('active',x===n));document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));$('view-'+n.dataset.view).classList.add('active');if(n.dataset.view==='sessions')bridge('sessions');if(n.dataset.view==='chat')setTimeout(()=>$('prompt').focus(),30)});
 const clear=()=>{$('empty')?.remove()},scroll=()=>{$('feed').scrollTop=$('feed').scrollHeight},texts=r=>r?.content?.map(x=>x.text||'').join('')||'';
 function msg(role,text=''){clear();let e=document.createElement('article');e.className='msg '+role;e.innerHTML=`<div class="who">${role==='user'?'YOU':'PI'}</div><div class="body"></div>`;e.querySelector('.body').textContent=text;$('feed').append(e);scroll();return e.querySelector('.body')}
-function working(on,label='PI IS THINKING'){streaming=on;$('send').style.display=on?'none':'block';$('stop').classList.toggle('show',on);$('prompt').disabled=on;$('dot').className='dot'+(on?' work':'');$('status').textContent=on?'● '+label:'● PI ONLINE';$('status').style.color=on?'var(--cyan)':'var(--green)';if(on&&!current){current=msg('assistant');current.innerHTML='<span class="typing"><i></i><i></i><i></i></span>'}}
+function working(on,label='PI IS THINKING'){streaming=on;$('send').style.display=on?'none':'block';$('stop').classList.toggle('show',on);$('prompt').disabled=on;$('dot').className='dot'+(on?' work':'');$('status').textContent=on?label:'PI ONLINE';$('status').style.color=on?'var(--cyan)':'var(--green)';if(on&&!current){current=msg('assistant');current.innerHTML='<span class="typing"><i></i><i></i><i></i></span>'}}
 function thinkingStart(){clear();if(thinkingPanel)return;thinkingPanel=document.createElement('div');thinkingPanel.className='thinkingpanel';thinkingPanel.innerHTML='<div class="thinkinghead"><i class="spin"></i><span>PI IS THINKING</span><span class="summary">Live reasoning</span></div><div class="thinkingbody"></div>';thinkingPanel.querySelector('.thinkinghead').onclick=()=>thinkingPanel.classList.toggle('collapsed');thinkingBody=thinkingPanel.querySelector('.thinkingbody');$('feed').append(thinkingPanel);working(true,'THINKING');scroll()}
 function thinkingDelta(text){if(!thinkingPanel)thinkingStart();thinkingBody.textContent+=text;thinkingBody.scrollTop=thinkingBody.scrollHeight;scroll()}
 function thinkingEnd(){if(!thinkingPanel)return;thinkingPanel.classList.add('done','collapsed');thinkingPanel.querySelector('.thinkinghead span').textContent='THOUGHT PROCESS';thinkingPanel.querySelector('.summary').textContent='Click to review'}
-function errorBox(text){clear();let e=document.createElement('div');e.className='errorbox';e.textContent=text;$('feed').append(e);$('dot').className='dot error';$('status').textContent='● ERROR';$('status').style.color='var(--red)';scroll()}
+function errorBox(text){clear();let e=document.createElement('div');e.className='errorbox';e.textContent=text;$('feed').append(e);$('dot').className='dot error';$('status').textContent='ERROR';$('status').style.color='var(--red)';scroll()}
 function submit(){let text=$('prompt').value.trim();if(!text||streaming)return;msg('user',text);$('prompt').value='';current=null;thinkingPanel=null;thinkingBody=null;working(true);bridge('prompt',{text})}$('send').onclick=submit;$('stop').onclick=()=>bridge('abort');$('prompt').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submit()}};
 function inputHTML(name,a){let out=[],path=a.path||a.file_path||a.filePath;if(path)out.push(`<div class="section"><span class="label">FILE</span><div class="path"></div></div>`);if(name==='bash'||name==='shell'){out.push(`<div class="section"><span class="label">COMMAND</span><pre class="terminal command"></pre></div>`)}else if(name.includes('edit')||a.old_string||a.oldText){out.push(`<div class="section"><span class="label">CHANGES</span><div class="removed"></div><div class="added"></div></div>`)}else if(name.includes('write')||a.content!==undefined){out.push(`<div class="section"><span class="label">CONTENT TO WRITE</span><pre class="terminal content"></pre></div>`)}else{out.push(`<div class="section"><span class="label">INPUT</span><pre class="terminal input"></pre></div>`)}out.push(`<div class="section output"><span class="label">LIVE OUTPUT</span><pre class="terminal">Waiting for output...</pre></div>`);return out.join('')}
 function toolStart(e){clear();let name=String(e.toolName||'tool'),a=e.args||{},el=document.createElement('div');el.className='tool';el.innerHTML=`<div class="toolhead"><i class="state"></i><b class="toolname"></b><span class="summary">Running...</span></div><div class="toolbody">${inputHTML(name,a)}</div>`;el.querySelector('.toolname').textContent=name;el.querySelector('.toolhead').onclick=()=>el.classList.toggle('collapsed');let path=a.path||a.file_path||a.filePath;if(path)el.querySelector('.path').textContent=path;if(el.querySelector('.command'))el.querySelector('.command').textContent='$ '+(a.command||a.cmd||'');if(el.querySelector('.removed')){el.querySelector('.removed').textContent='- '+String(a.old_string||a.oldText||'').replaceAll('\n','\n- ');el.querySelector('.added').textContent='+ '+String(a.new_string||a.newText||'').replaceAll('\n','\n+ ')}if(el.querySelector('.content'))el.querySelector('.content').textContent=a.content||'';if(el.querySelector('.input'))el.querySelector('.input').textContent=JSON.stringify(a,null,2);$('feed').append(el);toolMap.set(e.toolCallId,el);working(true,'USING '+name.toUpperCase());scroll()}
 function toolUpdate(e){let el=toolMap.get(e.toolCallId);if(!el)return;let t=texts(e.partialResult);if(t)el.querySelector('.output .terminal').textContent=t;el.querySelector('.summary').textContent='Streaming output...';scroll()}
 function toolEnd(e){let el=toolMap.get(e.toolCallId);if(!el)return;el.classList.add(e.isError?'fail':'ok');el.querySelector('.summary').textContent=e.isError?'Failed':'Completed';let t=texts(e.result);el.querySelector('.output .terminal').textContent=t||(e.isError?'Failed without output.':'Completed successfully.');scroll()}
-function history(ms){$('feed').innerHTML='';current=null;thinkingPanel=null;thinkingBody=null;toolMap.clear();for(let m of ms){if(m.role==='user'&&typeof m.content==='string')msg('user',m.content);if(m.role==='assistant'&&Array.isArray(m.content)){let t=m.content.filter(x=>x.type==='text').map(x=>x.text||'').join('');if(t)msg('assistant',t)}}if(!ms.length)$('feed').innerHTML='<div id="empty" class="empty"><div><div class="orb"></div><h2>What are we working on?</h2><p>Ask Pi to inspect, run, edit, or build something.</p></div></div>'}
+function history(ms){$('feed').innerHTML='';current=null;thinkingPanel=null;thinkingBody=null;toolMap.clear();for(let m of ms){if(m.role==='user'&&typeof m.content==='string')msg('user',m.content);if(m.role==='assistant'&&Array.isArray(m.content)){let t=m.content.filter(x=>x.type==='text').map(x=>x.text||'').join('');if(t)msg('assistant',t)}}if(!ms.length)$('feed').innerHTML='<div id="empty" class="empty"><div><div class="emptyMark"><i></i></div><h2>Ready when you are.</h2><p>Ask Pi to inspect, edit, run, or build.</p></div></div>'}
 function extensionUI(e){let dialogs=['select','confirm','input','editor'];if(dialogs.includes(e.method)){bridge('extensionUIResponse',{id:e.id,cancelled:true});errorBox(`The extension requested a “${e.method}” dialog, which Pi Space does not support yet. The request was cancelled.`);return}if(e.method==='notify'&&e.message)errorBox(e.message);if(e.method==='set_editor_text'){$('prompt').value=e.text||'';$('prompt').focus()}}
 window.rpcEvent=e=>{if(e.type==='extension_ui_request'){extensionUI(e);return}if(e.type==='agent_start')working(true);let ae=e.assistantMessageEvent;if(e.type==='message_update'&&ae?.type==='thinking_start')thinkingStart();if(e.type==='message_update'&&ae?.type==='thinking_delta')thinkingDelta(ae.delta||'');if(e.type==='message_update'&&ae?.type==='thinking_end')thinkingEnd();if(e.type==='message_update'&&ae?.type==='text_delta'){thinkingEnd();if(!current)current=msg('assistant');if(current.querySelector('.typing'))current.textContent='';current.textContent+=ae.delta;scroll()}if(e.type==='tool_execution_start')toolStart(e);if(e.type==='tool_execution_update')toolUpdate(e);if(e.type==='tool_execution_end')toolEnd(e);if(e.type==='agent_end'||e.type==='agent_settled'){working(false);current=null;$('prompt').disabled=false;$('prompt').focus()}if(e.type==='response')response(e);if(e.type==='extension_error')errorBox(e.error||'Extension error')};
 function response(e){if(e.success===false){working(false);errorBox(e.error||'Pi request failed');return}let d=e.data||{};if(e.command==='get_messages')history(d.messages||[]);if(e.command==='get_state'){let m=d.model;$('modelMeta').textContent=m?(m.name||m.id):'No model';$('sessionMeta').textContent=(d.sessionName||'Current session')+' · '+(d.messageCount||0)+' messages';if(m){let i=modelList.findIndex(x=>x.id===m.id&&x.provider===m.provider);if(i>=0)$('models').selectedIndex=i}if(d.thinkingLevel)$('thinking').value=d.thinkingLevel}if(e.command==='get_available_models'){modelList=d.models||[];$('models').innerHTML='';modelList.forEach(m=>{let o=document.createElement('option');o.textContent=(m.name||m.id)+' · '+m.provider;$('models').append(o)})}if(e.command==='get_available_thinking_levels'){$('thinking').innerHTML='';(d.levels||['off']).forEach(x=>{let o=document.createElement('option');o.textContent=x;$('thinking').append(o)})}}
