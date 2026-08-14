@@ -22,6 +22,7 @@ final class WakeListener: NSObject, NSApplicationDelegate {
   }
 
   func applicationDidFinishLaunching(_ notification: Notification) {
+    NSLog("Wake Pi Listener launched")
     buildMenu()
     requestPermissions()
   }
@@ -61,8 +62,10 @@ final class WakeListener: NSObject, NSApplicationDelegate {
       AVCaptureDevice.requestAccess(for: .audio) { microphone in
         DispatchQueue.main.async {
           if speech == .authorized && microphone {
+            NSLog("Speech and microphone permissions granted")
             self.startListening()
           } else {
+            NSLog("Permissions unavailable: speech=%ld microphone=%@", speech.rawValue, microphone.description)
             self.updateMenu("Permissions required")
             self.showPermissionHelp()
           }
@@ -109,10 +112,12 @@ final class WakeListener: NSObject, NSApplicationDelegate {
     do {
       try engine.start()
     } catch {
+      NSLog("Could not start microphone: %@", error.localizedDescription)
       updateMenu("Microphone unavailable")
       scheduleRestart(after: 4)
       return
     }
+    NSLog("Speech recognition started")
     updateMenu("Listening for “wake up Pi”")
     task = recognizer?.recognitionTask(with: nextRequest) { [weak self] result, error in
       guard let self else { return }
@@ -121,10 +126,10 @@ final class WakeListener: NSObject, NSApplicationDelegate {
       }
       if let error {
         let nsError = error as NSError
-        if nsError.domain != "kAFAssistantErrorDomain" || nsError.code != 1110 {
-          self.scheduleRestart(after: 2.0)
-        }
+        NSLog("Speech recognition ended: %@ (%ld)", nsError.domain, nsError.code)
+        self.scheduleRestart(after: nsError.domain == "kAFAssistantErrorDomain" && nsError.code == 1110 ? 0.8 : 2.0)
       } else if result?.isFinal == true {
+        NSLog("Speech recognition returned a final result")
         self.scheduleRestart(after: 0.8)
       }
     }
@@ -138,6 +143,7 @@ final class WakeListener: NSObject, NSApplicationDelegate {
     let mentionsPi = words.contains("pi") || words.contains("pie") || normalized.contains("wakeupi")
     guard Date().timeIntervalSince(lastTrigger) > 3 else { return }
     if mentionsPi && normalized.contains("time for bed") {
+      NSLog("Recognized time for bed Pi")
       lastTrigger = Date()
       closePi()
       scheduleRestart(after: 1.2)
@@ -147,6 +153,7 @@ final class WakeListener: NSObject, NSApplicationDelegate {
       return
     }
     lastTrigger = Date()
+    NSLog("Recognized wake up Pi")
     openPi()
     scheduleRestart(after: 1.2)
   }

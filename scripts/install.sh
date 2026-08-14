@@ -51,10 +51,18 @@ cp -R "$SOURCE_APP" "$INSTALL_DIR/Pi Space.app"
 if ((INSTALL_WAKE)); then
   SOURCE_WAKE="$ROOT/dist/Wake Pi Listener.app"
   [[ -d "$SOURCE_WAKE" ]] || { echo "Missing $SOURCE_WAKE. Run ./scripts/build.sh first." >&2; exit 1; }
+  WAKE_AGENT="$HOME/Library/LaunchAgents/com.olivergreen.wakepi.plist"
+  if [[ -f "$WAKE_AGENT" ]]; then
+    launchctl bootout "gui/$(id -u)/com.olivergreen.wakepi" 2>/dev/null || true
+  fi
   pkill -x WakePi 2>/dev/null || true
   rm -rf "$INSTALL_DIR/Wake Pi Listener.app"
   cp -R "$SOURCE_WAKE" "$INSTALL_DIR/Wake Pi Listener.app"
-  open "$INSTALL_DIR/Wake Pi Listener.app"
+  if [[ -f "$WAKE_AGENT" ]]; then
+    launchctl bootstrap "gui/$(id -u)" "$WAKE_AGENT"
+  else
+    open "$INSTALL_DIR/Wake Pi Listener.app"
+  fi
 fi
 
 if ((OPEN_AFTER)); then
