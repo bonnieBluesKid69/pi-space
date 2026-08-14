@@ -361,8 +361,14 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     } else if let baseURL, !baseURL.isEmpty {
       provider["baseUrl"] = baseURL
     }
-    provider["api"] = "openai-completions"
-    provider["authHeader"] = true
+    if name == "tabitoken" {
+      provider["api"] = "anthropic-messages"
+      provider.removeValue(forKey: "authHeader")
+      provider.removeValue(forKey: "compat")
+    } else {
+      provider["api"] = "openai-completions"
+      provider["authHeader"] = true
+    }
     if let key, !key.isEmpty { provider["apiKey"] = key }
     if name == "agentrouter" {
       provider["headers"] = [
@@ -370,8 +376,6 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
         "Version": "0.101.0",
       ]
       provider["compat"] = ["supportsDeveloperRole": false, "supportsReasoningEffort": false]
-    } else if name == "tabitoken" {
-      provider["compat"] = ["supportsFinishReason": false]
     }
     provider["models"] = managedModels.filter { $0["provider"] as? String == name }.map {
       let id = $0["id"] as! String
