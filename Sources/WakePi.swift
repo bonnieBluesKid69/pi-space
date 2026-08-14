@@ -10,6 +10,9 @@ final class WakeListener: NSObject, NSApplicationDelegate {
   private var statusItem: NSStatusItem!
   private var paused = false
   private var restartWork: DispatchWorkItem?
+  private var recognitionGeneration = 0
+  private var restartScheduledGeneration: Int?
+  private var speechFailureCount = 0
   private var lastTrigger = Date.distantPast
   private let appCandidates = [
     URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Applications/Pi Space.app"),
@@ -92,6 +95,10 @@ final class WakeListener: NSObject, NSApplicationDelegate {
 
   private func startListening() {
     guard !paused else { return }
+    restartWork?.cancel()
+    recognitionGeneration += 1
+    restartScheduledGeneration = nil
+    let generation = recognitionGeneration
     stopRecognition()
     let node = engine.inputNode
     let format = node.outputFormat(forBus: 0)
@@ -120,17 +127,21 @@ final class WakeListener: NSObject, NSApplicationDelegate {
     NSLog("Speech recognition started")
     updateMenu("Listening for “wake up Pi”")
     task = recognizer?.recognitionTask(with: nextRequest) { [weak self] result, error in
-      guard let self else { return }
+      guard let self, generation == self.recognitionGeneration else { return }
       if let result {
+        if !result.bestTranscription.formattedString.isEmpty { self.speechFailureCount = 0 }
         self.inspect(result.bestTranscription.formattedString)
       }
       if let error {
         let nsError = error as NSError
-        NSLog("Speech recognition ended: %@ (%ld)", nsError.domain, nsError.code)
-        self.scheduleRestart(after: nsError.domain == "kAFAssistantErrorDomain" && nsError.code == 1110 ? 0.8 : 2.0)
+        self.speechFailureCount += 1
+        let delay = min(60.0, max(2.0, pow(2.0, Double(min(self.speechFailureCount - 1, 5)) * 2.0)))
+        NSLog("Speech recognition ended: %@ (%ld); retrying in %.1fs", nsError.domain, nsError.code, delay)
+        self.scheduleRestart(after: delay, generation: generation)
       } else if result?.isFinal == true {
+        self.speechFailureCount = 0
         NSLog("Speech recognition returned a final result")
-        self.scheduleRestart(after: 0.8)
+        self.scheduleRestart(after: 0.8, generation: generation)
       }
     }
   }
@@ -201,10 +212,16 @@ final class WakeListener: NSObject, NSApplicationDelegate {
     }
   }
 
-  private func scheduleRestart(after delay: TimeInterval) {
-    guard !paused else { return }
+  private func scheduleRestart(after delay: TimeInterval, generation: Int? = nil) {
+    guard !paused, generation == nil || generation == recognitionGeneration else { return }
+    let expectedGeneration = generation ?? recognitionGeneration
+    guard restartScheduledGeneration != expectedGeneration else { return }
+    restartScheduledGeneration = expectedGeneration
     restartWork?.cancel()
-    let work = DispatchWorkItem { [weak self] in self?.startListening() }
+    let work = DispatchWorkItem { [weak self] in
+      guard let self, expectedGeneration == self.recognitionGeneration, !self.paused else { return }
+      self.startListening()
+    }
     restartWork = work
     DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
   }
