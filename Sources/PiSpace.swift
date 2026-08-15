@@ -201,7 +201,7 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     switch action {
     case "prompt":
       if let text = info["text"], !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-        js("voicePrompt", ["text": text])
+        js("voicePrompt", ["text": text, "conversation": info["conversation"] == "true"])
       }
     case "abort": rpc.send(["type": "abort"])
     case "summarize": js("voicePrompt", ["text": "Summarize this conversation so far in a concise spoken summary."])
@@ -277,19 +277,31 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
           }
         }
         let userText = ([t] + fileContext).filter { !$0.isEmpty }.joined(separator: "\n\n")
-        let message =
-          custom.isEmpty
+        let conversation = b["conversation"] as? Bool ?? false
+        let persistentBlock = custom.isEmpty
+          ? ""
+          : """
+            <persistent_user_instructions>
+            Follow these preferences throughout this response unless they conflict with safety, system, or developer requirements:
+            \(custom)
+            </persistent_user_instructions>
+
+            """
+        let voiceBlock = conversation
+          ? """
+            <voice_response_instructions>
+            Respond conversationally and concisely for spoken delivery. Do not use Markdown, code blocks, or long lists unless the user explicitly asks for them. Keep the answer to a few natural sentences when possible.
+            </voice_response_instructions>
+
+            """
+          : ""
+        let message = (persistentBlock + voiceBlock).isEmpty
           ? userText
           : """
-          <persistent_user_instructions>
-          Follow these preferences throughout this response unless they conflict with safety, system, or developer requirements:
-          \(custom)
-          </persistent_user_instructions>
-
-          <user_message>
-          \(userText)
-          </user_message>
-          """
+            \(persistentBlock)\(voiceBlock)<user_message>
+            \(userText)
+            </user_message>
+            """
         var command: [String: Any] = [
           "type": "prompt", "message": message, "streamingBehavior": "steer",
         ]

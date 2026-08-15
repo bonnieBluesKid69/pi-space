@@ -13,7 +13,7 @@ Pi Space is a small native macOS interface for the [Pi coding agent](https://git
 - Workspace switching
 - Model and thinking-level selectors
 - Locally stored custom instructions
-- Optional menu-bar voice listener for "wake up Pi" and "time for bed Pi"
+- Optional menu-bar voice listener for wake words, dictation, and one-on-one voice conversations
 - Universal macOS builds for Apple silicon and Intel
 
 ## Requirements
@@ -52,7 +52,7 @@ To include the optional voice listener:
 ./scripts/install.sh --with-wake-listener
 ```
 
-The listener asks for Microphone and Speech Recognition access when first opened. It runs in the menu bar. Click the menu-bar icon and use **Listening Enabled** to turn microphone recognition on or off; the setting persists across relaunches. When it is off, Wake Pi does not access the microphone or Speech Recognition service.
+The listener asks for Microphone and Speech Recognition access when first opened. It runs in the menu bar. Click the menu-bar icon and use **Listening Enabled** to turn microphone recognition on or off; the setting persists across relaunches. When it is off, Wake Pi does not access the microphone or Speech Recognition service. Use **Start Voice Conversation** for a continuous back-and-forth conversation with Pi, or **End Voice Conversation** to stop it.
 
 ## Updating
 
@@ -117,6 +117,8 @@ Install the optional listener with `./scripts/install.sh --with-wake-listener`. 
 | “Repeat that” | Speaks the last assistant response aloud. |
 | “Summarize this” | Requests a concise spoken summary from Pi. |
 | “Time for bed Pi” | Aborts active work and closes Pi Space. |
+| **Start Voice Conversation** | Starts a continuous spoken conversation from the Wake Pi menu. |
+| “Goodbye Pi” | Ends continuous voice conversation and returns to wake-word mode. |
 
 Voice actions communicate through local macOS distributed notifications. No network listener is opened by Wake Pi.
 

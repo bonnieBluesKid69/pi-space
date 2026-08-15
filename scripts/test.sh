@@ -28,6 +28,8 @@ done
 [[ "$(lipo -archs "$PI_APP/Contents/MacOS/PiSpace")" == *x86_64* ]]
 [[ "$(lipo -archs "$WAKE_APP/Contents/MacOS/WakePi")" == *arm64* ]]
 [[ "$(lipo -archs "$WAKE_APP/Contents/MacOS/WakePi")" == *x86_64* ]]
+strings "$WAKE_APP/Contents/MacOS/WakePi" | grep -q "Start Voice Conversation"
+strings "$WAKE_APP/Contents/MacOS/WakePi" | grep -q "goodbye Pi"
 
 RPC_STDERR="$(mktemp -t pi-space-rpc-stderr.XXXXXX)"
 trap 'rm -f "$RPC_STDERR"' EXIT
