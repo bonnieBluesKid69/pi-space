@@ -106,7 +106,9 @@ Type `/` in the composer to open autocomplete. Use the arrow keys to move throug
 
 ## Voice commands
 
-The microphone button in Pi Space starts the voice conversation directly. Pi Space requests its own Microphone and Speech Recognition permissions, listens while the voice stage is open, sends each turn after a short pause, and speaks the response. **End conversation** stops recognition and speech immediately, including while Pi is still generating a response.
+The microphone button in Pi Space starts the voice conversation directly. Pi Space requests its own Microphone and Speech Recognition permissions, shows a live transcript, sends each turn after your selected Fast, Balanced, or Patient pause, and speaks the response. While Pi speaks, macOS voice processing and transcript-overlap filtering let you interrupt with a new request while reducing speaker echo. **Go to sleep Pi** and **End conversation** stop recognition, generation, queued speech, and playback immediately in every voice state.
+
+The glass voice stage includes microphone mute, pause/resume, repeat-last-answer, and response-timing controls. Settings also provides Concise, Normal, and Detailed spoken-response lengths. These preferences persist across launches.
 
 In **Settings → Voice**, install Kokoro once, choose one of its local neural voices, and preview it. Kokoro is free and open, needs no API key or account, and runs entirely on Apple Silicon after the initial download of roughly 350 MB. Pi Space starts the model only for voice playback and stops it when voice mode ends. The default voice is **Heart — warm**.
 

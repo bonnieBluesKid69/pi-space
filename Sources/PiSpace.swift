@@ -131,7 +131,8 @@ final class RPC {
 
 final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegate {
   var onState: ((String, String) -> Void)?
-  var onPrompt: ((String) -> Void)?
+  var onTranscript: ((String, Bool) -> Void)?
+  var onPrompt: ((String, Bool) -> Void)?
   var onAbort: (() -> Void)?
   var onWake: (() -> Void)?
   var onSettingsChanged: (() -> Void)?
@@ -149,17 +150,37 @@ final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate, AVAudioPla
   private var kokoroProcess: Process?
   private var kokoroPlayer: AVAudioPlayer?
   private var kokoroAudioURL: URL?
+  private var prefetchedKokoro: (text: String, url: URL)?
+  private var prefetchClient: Process?
+  private var prefetchText: String?
+  private var prefetchGeneration = 0
   private var speechQueue = [String]()
   private var speechBuffer = ""
+  private var responseTextBuffer = ""
   private var speechResponseFinished = false
   private var receivedStreamingSpeech = false
   private let kokoroRoot = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support/Pi Space/kokoro")
-  private enum Mode { case idle, wake, conversation, waiting, speaking, preview }
+  private enum Mode { case idle, wake, conversation, waiting, speaking, paused, preview }
+  private enum ResponsePace: String {
+    case fast, balanced, patient
+    var pause: TimeInterval { switch self { case .fast: return 0.8; case .balanced: return 1.5; case .patient: return 2.3 } }
+  }
   private var mode: Mode = .idle
+  private var responsePace = ResponsePace(rawValue: UserDefaults.standard.string(forKey: "PiSpaceVoicePace") ?? "balanced") ?? .balanced
+  private var responseLength = UserDefaults.standard.string(forKey: "PiSpaceVoiceLength") ?? "concise"
+  private var microphoneMuted = false
+  private var pausedMode: Mode?
+  private var lastSpokenText = ""
+  private var lastResponseText = ""
+  private var lastSpeechNormalized = ""
   private let wakeKey = "PiSpaceWakePhrasesEnabled"
   private let voiceKey = "PiSpaceVoiceIdentifier"
 
   var wakeEnabled: Bool { UserDefaults.standard.bool(forKey: wakeKey) }
+  var voicePace: String { responsePace.rawValue }
+  var voiceLength: String { responseLength }
+  var isMicrophoneMuted: Bool { microphoneMuted }
+  var isPaused: Bool { pausedMode != nil }
   var selectedVoiceIdentifier: String {
     UserDefaults.standard.string(forKey: voiceKey) ?? preferredVoice()?.identifier ?? ""
   }
@@ -179,6 +200,74 @@ final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate, AVAudioPla
     kokoroVoice = voice
     UserDefaults.standard.set(voice, forKey: "PiSpaceKokoroVoice")
     onSettingsChanged?()
+  }
+
+  func setResponsePace(_ value: String) {
+    guard let pace = ResponsePace(rawValue: value) else { return }
+    responsePace = pace
+    UserDefaults.standard.set(value, forKey: "PiSpaceVoicePace")
+    onSettingsChanged?()
+  }
+
+  func setResponseLength(_ value: String) {
+    guard ["concise", "normal", "detailed"].contains(value) else { return }
+    responseLength = value
+    UserDefaults.standard.set(value, forKey: "PiSpaceVoiceLength")
+    onSettingsChanged?()
+  }
+
+  func setMicrophoneMuted(_ muted: Bool) {
+    microphoneMuted = muted
+    if muted {
+      silenceWork?.cancel()
+      transcript = ""
+      stopRecognition()
+      if mode == .conversation { onState?("muted", "Microphone off") }
+    } else if mode == .conversation {
+      startRecognition(.conversation)
+    } else if mode == .speaking {
+      startBargeInRecognition()
+    }
+    onSettingsChanged?()
+  }
+
+  func togglePause() {
+    if let previous = pausedMode {
+      pausedMode = nil
+      mode = previous
+      if previous == .speaking {
+        if kokoroPlayer?.play() == true { startBargeInRecognition() }
+        else { speaker.continueSpeaking() }
+        onState?("speaking", lastSpokenText)
+      } else if previous == .conversation {
+        startRecognition(.conversation)
+      } else if previous == .waiting {
+        onState?("thinking", "Your request is with Pi now.")
+        drainSpeechBuffer(flush: speechResponseFinished)
+        if mode == .waiting, !speechResponseFinished { startRecognition(.waiting) }
+      }
+    } else if [.conversation, .waiting, .speaking].contains(mode) {
+      pausedMode = mode
+      if mode == .speaking {
+        kokoroPlayer?.pause()
+        speaker.pauseSpeaking(at: .immediate)
+      }
+      stopRecognition()
+      mode = .paused
+      onState?("paused", "Voice conversation paused")
+      if !microphoneMuted { startRecognition(.paused) }
+    }
+    onSettingsChanged?()
+  }
+
+  func repeatLastResponse() {
+    guard mode == .conversation, !lastResponseText.isEmpty else { return }
+    stopRecognition()
+    speechQueue = [lastResponseText]
+    speechBuffer = ""
+    speechResponseFinished = true
+    mode = .waiting
+    playNextSpeechIfNeeded()
   }
 
   func installKokoro() {
@@ -217,6 +306,7 @@ final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate, AVAudioPla
     kokoroProcess = nil
     kokoroPlayer?.stop()
     kokoroPlayer = nil
+    clearKokoroPrefetch()
   }
 
   func shutdown() {
@@ -228,6 +318,7 @@ final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate, AVAudioPla
     speaker.stopSpeaking(at: .immediate)
     kokoroPlayer?.stop()
     kokoroPlayer = nil
+    clearKokoroPrefetch()
     if let kokoroAudioURL { try? FileManager.default.removeItem(at: kokoroAudioURL) }
     kokoroAudioURL = nil
     stopKokoroServer()
@@ -289,8 +380,12 @@ final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate, AVAudioPla
     stopRecognition()
     speechQueue.removeAll()
     speechBuffer = ""
+    responseTextBuffer = ""
     speechResponseFinished = false
     receivedStreamingSpeech = false
+    microphoneMuted = false
+    pausedMode = nil
+    lastResponseText = ""
     mode = .conversation
     onState?("starting", "Requesting microphone access…")
     if kokoroInstalled { startKokoroServer { _ in } }
@@ -298,11 +393,15 @@ final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate, AVAudioPla
   }
 
   func end(abortResponse: Bool = true) {
-    let shouldAbort = mode == .waiting && abortResponse
+    let shouldAbort = (mode == .waiting || mode == .speaking || pausedMode == .waiting || pausedMode == .speaking) && abortResponse
     mode = .idle
+    pausedMode = nil
+    microphoneMuted = false
     transcript = ""
+    onTranscript?("", false)
     speechQueue.removeAll()
     speechBuffer = ""
+    responseTextBuffer = ""
     speechResponseFinished = false
     receivedStreamingSpeech = false
     generation += 1
@@ -312,6 +411,7 @@ final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate, AVAudioPla
     restartWork = nil
     kokoroPlayer?.stop()
     kokoroPlayer = nil
+    clearKokoroPrefetch()
     if let kokoroAudioURL { try? FileManager.default.removeItem(at: kokoroAudioURL) }
     kokoroAudioURL = nil
     stopKokoroServer()
@@ -327,22 +427,28 @@ final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate, AVAudioPla
   }
 
   func receiveResponse(_ text: String) {
-    guard mode == .waiting else { return }
+    guard mode == .waiting || (mode == .paused && pausedMode == .waiting) else { return }
     receivedStreamingSpeech = false
     speechBuffer = text
+    responseTextBuffer = text
     finishResponseStreaming(fallback: text)
   }
 
   func receiveResponseChunk(_ text: String) {
-    guard !text.isEmpty, mode == .waiting || mode == .speaking else { return }
+    guard !text.isEmpty,
+      mode == .waiting || mode == .speaking || (mode == .paused && (pausedMode == .waiting || pausedMode == .speaking))
+    else { return }
     receivedStreamingSpeech = true
+    responseTextBuffer += text
     speechBuffer += text
     drainSpeechBuffer()
   }
 
   func finishResponseStreaming(fallback: String = "") {
-    guard mode == .waiting || mode == .speaking else { return }
+    guard mode == .waiting || mode == .speaking || (mode == .paused && (pausedMode == .waiting || pausedMode == .speaking)) else { return }
     if !receivedStreamingSpeech && speechBuffer.isEmpty { speechBuffer = fallback }
+    if responseTextBuffer.isEmpty { responseTextBuffer = fallback }
+    lastResponseText = cleanSpeechText(responseTextBuffer)
     speechResponseFinished = true
     drainSpeechBuffer(flush: true)
     if speechQueue.isEmpty && mode == .waiting {
@@ -353,39 +459,77 @@ final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate, AVAudioPla
 
   private func drainSpeechBuffer(flush: Bool = false) {
     while let boundary = speechBoundary(in: speechBuffer) {
-      let sentence = String(speechBuffer[..<boundary]).trimmingCharacters(in: .whitespacesAndNewlines)
+      let sentence = cleanSpeechText(String(speechBuffer[..<boundary]))
       speechBuffer = String(speechBuffer[speechBuffer.index(after: boundary)...])
-      if !sentence.isEmpty { speechQueue.append(sentence) }
+      enqueueSpeech(sentence)
     }
     if flush {
-      let remainder = speechBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
+      let remainder = cleanSpeechText(speechBuffer)
       speechBuffer = ""
-      if !remainder.isEmpty { speechQueue.append(remainder) }
+      enqueueSpeech(remainder)
     }
-    playNextSpeechIfNeeded()
+    if mode != .paused { playNextSpeechIfNeeded() }
+  }
+
+  private func enqueueSpeech(_ text: String) {
+    guard !text.isEmpty else { return }
+    if text.count < 28, !speechQueue.isEmpty {
+      speechQueue[speechQueue.count - 1] += " " + text
+    } else {
+      speechQueue.append(text)
+    }
+    if mode == .speaking, kokoroInstalled { prefetchNextKokoroIfNeeded() }
+  }
+
+  private func cleanSpeechText(_ raw: String) -> String {
+    raw.replacingOccurrences(of: "```[\\s\\S]*?```", with: " Code omitted. ", options: .regularExpression)
+      .replacingOccurrences(of: "`([^`]+)`", with: "$1", options: .regularExpression)
+      .replacingOccurrences(of: "!?(?:\\[([^]]+)\\])\\([^)]*\\)", with: "$1", options: .regularExpression)
+      .replacingOccurrences(of: "https?://\\S+", with: "", options: .regularExpression)
+      .replacingOccurrences(of: "[*_#>|~]", with: "", options: .regularExpression)
+      .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+      .trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   private func speechBoundary(in text: String) -> String.Index? {
     guard text.count > 24 else { return nil }
     var index = text.startIndex
     while index < text.endIndex {
-      if ".!?".contains(text[index]) {
-        let next = text.index(after: index)
-        if next == text.endIndex || text[next].isWhitespace { return index }
-      }
-      index = text.index(after: index)
+      let character = text[index]
+      let next = text.index(after: index)
+      if ".!?".contains(character), next == text.endIndex || text[next].isWhitespace { return index }
+      if text.distance(from: text.startIndex, to: index) > 180,
+        ",;:".contains(character), next == text.endIndex || text[next].isWhitespace { return index }
+      index = next
     }
     return nil
   }
 
   private func playNextSpeechIfNeeded() {
-    guard mode != .speaking, let next = speechQueue.first else { return }
+    guard mode != .speaking && mode != .paused, let next = speechQueue.first else { return }
     speechQueue.removeFirst()
     generation += 1
     stopRecognition()
     mode = .speaking
+    lastSpokenText = next
+    lastSpeechNormalized = normalizeSpeech(next)
+    if lastResponseText.isEmpty { lastResponseText = next }
     onState?("speaking", next)
-    if kokoroInstalled { speakWithKokoro(next) } else { speakWithSystemVoice(next) }
+    if kokoroInstalled {
+      if let prefetched = prefetchedKokoro, prefetched.text == next {
+        prefetchedKokoro = nil
+        playKokoroFile(prefetched.url, fallbackText: next)
+      } else if prefetchClient != nil, prefetchText == next {
+        speechQueue.insert(next, at: 0)
+        mode = .waiting
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in self?.playNextSpeechIfNeeded() }
+        return
+      } else {
+        speakWithKokoro(next)
+      }
+      prefetchNextKokoroIfNeeded()
+    } else { speakWithSystemVoice(next) }
+    if !microphoneMuted { startBargeInRecognition(after: 0.55) }
   }
 
   private func speakWithSystemVoice(_ text: String) {
@@ -426,32 +570,98 @@ final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate, AVAudioPla
     poll(80)
   }
 
+  private func makeKokoroClient(_ text: String) -> (Process, Pipe)? {
+    let request: [String: Any] = ["text": text, "voice": kokoroVoice, "speed": 1.0]
+    guard let data = try? JSONSerialization.data(withJSONObject: request),
+      let json = String(data: data, encoding: .utf8) else { return nil }
+    let client = Process()
+    let output = Pipe()
+    client.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+    client.arguments = ["-c", "import socket,sys;s=socket.socket(socket.AF_UNIX);s.settimeout(180);s.connect(sys.argv[1]);s.sendall((sys.argv[2]+'\\n').encode());d=b''\nwhile b'\\n' not in d:\n c=s.recv(4096)\n if not c: break\n d+=c\nprint(d.decode().strip())", kokoroRoot.appendingPathComponent("tts.sock").path, json]
+    client.standardOutput = output
+    client.standardError = FileHandle.nullDevice
+    return (client, output)
+  }
+
+  private func kokoroOutputURL(_ output: Pipe) -> URL? {
+    let result = output.fileHandleForReading.readDataToEndOfFile()
+    guard let object = try? JSONSerialization.jsonObject(with: result) as? [String: Any],
+      object["status"] as? String == "ok", let path = object["audio_file"] as? String else { return nil }
+    return URL(fileURLWithPath: path)
+  }
+
+  private func playKokoroFile(_ url: URL, fallbackText: String) {
+    guard let player = try? AVAudioPlayer(contentsOf: url) else {
+      try? FileManager.default.removeItem(at: url)
+      speakWithSystemVoice(fallbackText)
+      return
+    }
+    kokoroPlayer = player
+    kokoroAudioURL = url
+    player.delegate = self
+    if mode != .paused { player.play() }
+  }
+
+  private func prefetchNextKokoroIfNeeded() {
+    guard prefetchedKokoro == nil, prefetchClient == nil, let next = speechQueue.first else { return }
+    let token = prefetchGeneration
+    startKokoroServer { [weak self] ready in
+      guard let self, ready, token == self.prefetchGeneration, self.mode == .speaking,
+        let (client, output) = self.makeKokoroClient(next) else { return }
+      self.prefetchClient = client
+      self.prefetchText = next
+      client.terminationHandler = { [weak self, weak client] _ in
+        guard let self else { return }
+        let url = self.kokoroOutputURL(output)
+        DispatchQueue.main.async {
+          let canUsePrefetch = self.mode == .speaking
+            || (self.mode == .waiting && self.speechQueue.first == next)
+          guard token == self.prefetchGeneration, canUsePrefetch,
+            self.prefetchClient === client, let url else {
+            if self.prefetchClient === client {
+              self.prefetchClient = nil
+              self.prefetchText = nil
+            }
+            if let url { try? FileManager.default.removeItem(at: url) }
+            return
+          }
+          self.prefetchClient = nil
+          self.prefetchText = nil
+          self.prefetchedKokoro = (next, url)
+          if self.mode == .waiting { self.playNextSpeechIfNeeded() }
+        }
+      }
+      do { try client.run() } catch {
+        self.prefetchClient = nil
+        self.prefetchText = nil
+      }
+    }
+  }
+
+  private func clearKokoroPrefetch() {
+    prefetchGeneration += 1
+    if prefetchClient?.isRunning == true { prefetchClient?.terminate() }
+    prefetchClient = nil
+    prefetchText = nil
+    if let url = prefetchedKokoro?.url { try? FileManager.default.removeItem(at: url) }
+    prefetchedKokoro = nil
+  }
+
   private func speakWithKokoro(_ text: String) {
     let expectedMode = mode
     startKokoroServer { [weak self] ready in
       guard let self, self.mode == expectedMode else { return }
-      guard ready else { self.speakWithSystemVoice(text); return }
-      let request: [String: Any] = ["text": text, "voice": self.kokoroVoice, "speed": 1.0]
-      guard let data = try? JSONSerialization.data(withJSONObject: request),
-        let json = String(data: data, encoding: .utf8) else { self.speakWithSystemVoice(text); return }
-      let client = Process()
-      let output = Pipe()
-      client.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
-      client.arguments = ["-c", "import socket,sys;s=socket.socket(socket.AF_UNIX);s.settimeout(180);s.connect(sys.argv[1]);s.sendall((sys.argv[2]+'\\n').encode());d=b''\nwhile b'\\n' not in d:\n c=s.recv(4096)\n if not c: break\n d+=c\nprint(d.decode().strip())", self.kokoroRoot.appendingPathComponent("tts.sock").path, json]
-      client.standardOutput = output
-      client.standardError = FileHandle.nullDevice
+      guard ready, let (client, output) = self.makeKokoroClient(text) else { self.speakWithSystemVoice(text); return }
       client.terminationHandler = { [weak self] _ in
-        let result = output.fileHandleForReading.readDataToEndOfFile()
+        guard let self else { return }
+        let url = self.kokoroOutputURL(output)
         DispatchQueue.main.async {
-          guard let self, self.mode == expectedMode,
-            let object = try? JSONSerialization.jsonObject(with: result) as? [String: Any],
-            object["status"] as? String == "ok", let path = object["audio_file"] as? String,
-            let player = try? AVAudioPlayer(contentsOf: URL(fileURLWithPath: path))
-          else { self?.speakWithSystemVoice(text); return }
-          self.kokoroPlayer = player
-          self.kokoroAudioURL = URL(fileURLWithPath: path)
-          player.delegate = self
-          player.play()
+          guard self.mode == expectedMode || (self.mode == .paused && self.pausedMode == expectedMode) else {
+            if let url { try? FileManager.default.removeItem(at: url) }
+            return
+          }
+          guard let url else { self.speakWithSystemVoice(text); return }
+          self.playKokoroFile(url, fallbackText: text)
         }
       }
       do { try client.run() } catch { self.speakWithSystemVoice(text) }
@@ -475,12 +685,21 @@ final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate, AVAudioPla
       return
     }
     guard mode == .speaking else { return }
+    stopRecognition()
     kokoroPlayer = nil
     if let kokoroAudioURL { try? FileManager.default.removeItem(at: kokoroAudioURL) }
     kokoroAudioURL = nil
-    mode = .conversation
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
-      self?.startRecognition(.conversation)
+    if !speechQueue.isEmpty {
+      mode = .waiting
+      playNextSpeechIfNeeded()
+    } else if speechResponseFinished {
+      mode = .conversation
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
+        self?.startRecognition(.conversation)
+      }
+    } else {
+      mode = .waiting
+      if !microphoneMuted { startRecognition(.waiting) }
     }
   }
 
@@ -510,24 +729,36 @@ final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate, AVAudioPla
   }
 
   private func startRecognition(_ targetMode: Mode) {
-    guard targetMode == .wake ? (wakeEnabled && (mode == .idle || mode == .wake)) : mode == .conversation else { return }
+    let allowed = targetMode == .wake
+      ? (wakeEnabled && (mode == .idle || mode == .wake))
+      : targetMode == .conversation ? mode == .conversation
+      : targetMode == .waiting ? mode == .waiting
+      : targetMode == .paused ? mode == .paused
+      : targetMode == .speaking && mode == .speaking
+    guard allowed, !microphoneMuted else { return }
     generation += 1
     let currentGeneration = generation
     stopRecognition()
     transcript = ""
+    if targetMode != .speaking && targetMode != .waiting { onTranscript?("", false) }
     mode = targetMode
 
     let node = engine.inputNode
+    if targetMode == .speaking {
+      try? node.setVoiceProcessingEnabled(true)
+    } else if node.isVoiceProcessingEnabled {
+      try? node.setVoiceProcessingEnabled(false)
+    }
     let format = node.outputFormat(forBus: 0)
     guard format.sampleRate > 0, format.channelCount > 0 else {
-      if targetMode == .conversation { onState?("error", "The microphone is not available.") }
+      if targetMode == .conversation || targetMode == .speaking { onState?("error", "The microphone is not available.") }
       return
     }
     let nextRequest = SFSpeechAudioBufferRecognitionRequest()
     nextRequest.shouldReportPartialResults = true
     nextRequest.taskHint = targetMode == .wake ? .confirmation : .dictation
     nextRequest.contextualStrings = targetMode == .wake
-      ? ["wake up Pi"] : ["go to sleep Pi"]
+      ? ["wake up Pi"] : ["go to sleep Pi", "stop Pi", "wait Pi"]
     request = nextRequest
     node.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
       nextRequest.append(buffer)
@@ -538,7 +769,7 @@ final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate, AVAudioPla
       try engine.start()
     } catch {
       stopRecognition()
-      if targetMode == .conversation { onState?("error", "Could not start the microphone: \(error.localizedDescription)") }
+      if targetMode == .conversation || targetMode == .speaking { onState?("error", "Could not start the microphone: \(error.localizedDescription)") }
       else { scheduleRestart(targetMode, after: 3) }
       return
     }
@@ -552,6 +783,12 @@ final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate, AVAudioPla
           else if error != nil && self.mode == .conversation {
             self.stopRecognition()
             self.onState?("error", "Speech Recognition stopped. Click End conversation and try again.")
+          } else if (error != nil || result?.isFinal == true) && self.mode == .speaking {
+            self.scheduleBargeInRestart()
+          } else if (error != nil || result?.isFinal == true) && self.mode == .waiting {
+            self.startRecognition(.waiting)
+          } else if (error != nil || result?.isFinal == true) && self.mode == .paused {
+            self.startRecognition(.paused)
           }
         }
       }
@@ -571,14 +808,21 @@ final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate, AVAudioPla
       }
       return
     }
-    guard mode == .conversation else { return }
     if normalized.contains("go to sleep pi") || normalized.contains("go to sleep pie") {
       end()
       return
     }
+    if mode == .speaking {
+      guard isLikelyBargeIn(normalized, final: final) else { return }
+      interruptSpeech(with: clean)
+      return
+    }
+    if mode == .waiting || mode == .paused { return }
+    guard mode == .conversation else { return }
     transcript = clean
-    onState?("listening", clean)
-    scheduleSend(after: final ? 0.3 : 1.5)
+    onTranscript?(clean, final)
+    onState?("listening", "")
+    scheduleSend(after: final ? min(0.35, responsePace.pause) : responsePace.pause)
   }
 
   private func scheduleSend(after delay: TimeInterval) {
@@ -590,13 +834,72 @@ final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate, AVAudioPla
       guard !clean.isEmpty else { return }
       self.mode = .waiting
       self.transcript = ""
+      self.onTranscript?(clean, true)
       self.generation += 1
       self.stopRecognition()
       self.onState?("thinking", "")
-      self.onPrompt?(clean)
+      self.onPrompt?(clean, false)
+      if !self.microphoneMuted { self.startRecognition(.waiting) }
     }
     silenceWork = work
     DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+  }
+
+  private func startBargeInRecognition(after delay: TimeInterval = 0) {
+    guard mode == .speaking, !microphoneMuted else { return }
+    let work = DispatchWorkItem { [weak self] in
+      guard let self, self.mode == .speaking, !self.microphoneMuted else { return }
+      self.startRecognition(.speaking)
+    }
+    restartWork?.cancel()
+    restartWork = work
+    DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+  }
+
+  private func scheduleBargeInRestart() {
+    guard mode == .speaking else { return }
+    startBargeInRecognition(after: 0.35)
+  }
+
+  private func normalizeSpeech(_ value: String) -> String {
+    value.lowercased().replacingOccurrences(of: "[^a-z0-9]+", with: " ", options: .regularExpression)
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  private func isLikelyBargeIn(_ normalized: String, final: Bool) -> Bool {
+    let words = normalized.split(separator: " ").map(String.init)
+    guard words.count >= 2, normalized.count >= 5 else { return false }
+    let spokenWords = Set(lastSpeechNormalized.split(separator: " ").map(String.init))
+    let overlap = words.filter { spokenWords.contains($0) }.count
+    let overlapRatio = Double(overlap) / Double(max(words.count, 1))
+    if overlapRatio > 0.72 { return false }
+    return final || words.count >= 3
+  }
+
+  private func interruptSpeech(with text: String) {
+    let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !clean.isEmpty else { return }
+    generation += 1
+    restartWork?.cancel()
+    silenceWork?.cancel()
+    stopRecognition()
+    kokoroPlayer?.stop()
+    kokoroPlayer = nil
+    clearKokoroPrefetch()
+    if let kokoroAudioURL { try? FileManager.default.removeItem(at: kokoroAudioURL) }
+    kokoroAudioURL = nil
+    speaker.stopSpeaking(at: .immediate)
+    speechQueue.removeAll()
+    speechBuffer = ""
+    responseTextBuffer = ""
+    speechResponseFinished = false
+    receivedStreamingSpeech = false
+    mode = .waiting
+    transcript = ""
+    onTranscript?(clean, true)
+    onState?("thinking", "Interrupted. Passing your new request to Pi.")
+    onAbort?()
+    onPrompt?(clean, true)
   }
 
   private func scheduleRestart(_ targetMode: Mode, after delay: TimeInterval) {
@@ -628,6 +931,7 @@ final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate, AVAudioPla
       return
     }
     guard mode == .speaking else { return }
+    stopRecognition()
     if !speechQueue.isEmpty {
       mode = .waiting
       playNextSpeechIfNeeded()
@@ -695,15 +999,25 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     DistributedNotificationCenter.default().addObserver(
       self, selector: #selector(receiveVoiceAction(_:)), name: voiceNotification, object: nil)
     voice.onState = { [weak self] state, text in self?.js("voiceState", ["state": state, "text": text]) }
-    voice.onPrompt = { [weak self] text in
-      self?.js("voicePrompt", ["text": text, "conversation": true])
+    voice.onTranscript = { [weak self] text, final in self?.js("voiceTranscript", ["text": text, "final": final]) }
+    voice.onPrompt = { [weak self] text, interrupt in
+      self?.js("voicePrompt", ["text": text, "conversation": true, "interrupt": interrupt])
     }
     voice.onAbort = { [weak self] in self?.rpc.send(["type": "abort"]) }
     voice.onWake = { [weak self] in
       self?.view.window?.makeKeyAndOrderFront(nil)
       NSApp.activate(ignoringOtherApps: true)
     }
-    voice.onSettingsChanged = { [weak self] in self?.syncProviderSettings() }
+    voice.onSettingsChanged = { [weak self] in
+      guard let self else { return }
+      self.syncProviderSettings()
+      self.js("voiceSettings", [
+        "pace": self.voice.voicePace,
+        "length": self.voice.voiceLength,
+        "muted": self.voice.isMicrophoneMuted,
+        "paused": self.voice.isPaused,
+      ])
+    }
     rpc.event = { [weak self] in self?.forward($0) }
     rpc.failure = { [weak self] in self?.js("appError", ["message": $0]) }
     guard let path = Bundle.main.path(forResource: "PiSpace", ofType: "html"),
@@ -777,6 +1091,14 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     switch a {
     case "voiceStart": voice.start()
     case "voiceEnd": voice.end()
+    case "voiceMute":
+      if let muted = b["muted"] as? Bool { voice.setMicrophoneMuted(muted) }
+    case "voicePause": voice.togglePause()
+    case "voiceRepeat": voice.repeatLastResponse()
+    case "setVoicePace":
+      if let value = b["value"] as? String { voice.setResponsePace(value) }
+    case "setVoiceLength":
+      if let value = b["value"] as? String { voice.setResponseLength(value) }
     case "setWakePhrases":
       if let enabled = b["enabled"] as? Bool { voice.setWakeEnabled(enabled) }
     case "setVoice":
@@ -832,7 +1154,7 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
         let voiceBlock = conversation
           ? """
             <voice_response_instructions>
-            Respond conversationally and concisely for spoken delivery. Do not use Markdown, code blocks, or long lists unless the user explicitly asks for them. Keep the answer to a few natural sentences when possible.
+            Respond conversationally for spoken delivery. Do not use Markdown, code blocks, raw links, or long lists unless explicitly requested. Response length: \(voice.voiceLength). Concise means a few natural sentences, normal means a short complete explanation, and detailed means a fuller spoken answer without unnecessary repetition.
             </voice_response_instructions>
 
             """
@@ -979,6 +1301,8 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
       "selectedProvider": selectedProvider ?? "",
       "selectedModel": selectedModel ?? "",
       "wakePhrasesEnabled": voice.wakeEnabled,
+      "voicePace": voice.voicePace,
+      "voiceLength": voice.voiceLength,
       "voiceIdentifier": voice.selectedVoiceIdentifier,
       "voices": voice.availableVoices(),
       "kokoroInstalled": voice.kokoroInstalled,
