@@ -28,3 +28,22 @@ jobs:
             test "$(lipo -archs 'dist/Pi Space.app/Contents/MacOS/PiSpace')" = "arm64 x86_64"
           test "$(lipo -archs 'dist/Wake Pi Listener.app/Contents/MacOS/WakePi')" = "x86_64 arm64" || \
             test "$(lipo -archs 'dist/Wake Pi Listener.app/Contents/MacOS/WakePi')" = "arm64 x86_64"
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Build Windows shell
+        run: dotnet build Platforms/Windows/PiSpace.Windows.csproj --configuration Release
+      - name: Publish Windows shell
+        run: dotnet publish Platforms/Windows/PiSpace.Windows.csproj --configuration Release --runtime win-x64 --self-contained false --output dist/windows
+      - name: Verify Windows package
+        shell: pwsh
+        run: |
+          if (!(Test-Path "dist/windows/PiSpace.exe")) { throw "PiSpace.exe was not published" }
+          if (!(Test-Path "dist/windows/Resources/PiSpace.html")) { throw "Shared UI was not published" }
+          if (!(Test-Path "dist/windows/Resources/pi-space-bridge.js")) { throw "Shared bridge was not published" }

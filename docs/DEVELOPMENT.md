@@ -32,6 +32,19 @@ Every host should send `hostCapabilities` after navigation finishes. The payload
 
 Run `node scripts/test-bridge.js` to validate macOS, WebView2, Linux-hook, inbound-event, and missing-host behavior.
 
+## Windows preview
+
+`Platforms/Windows` contains the first native WebView2 shell. It reuses the shared UI and supports Pi RPC chat/tool streaming, sessions, workspaces, attachments, clipboard, model and thinking controls, provider configuration, and persistent instructions. Voice, wake phrases, and Kokoro are intentionally reported as unavailable until Windows audio behavior is implemented and tested on Windows hardware.
+
+Prerequisites are Windows 10 version 1809 or later, the .NET 8 SDK, the WebView2 Runtime, Node.js, and Pi. Build and run it from PowerShell:
+
+```powershell
+dotnet build Platforms/Windows/PiSpace.Windows.csproj --configuration Release
+dotnet run --project Platforms/Windows/PiSpace.Windows.csproj
+```
+
+The hosted `windows` CI job compiles and publishes a framework-dependent `win-x64` build. Do not distribute an unsigned executable as a trusted release; release packaging and signing remain separate work.
+
 ## Prerequisites
 
 - macOS 13+
