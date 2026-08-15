@@ -106,6 +106,8 @@ Type `/` in the composer to open autocomplete. Use the arrow keys to move throug
 
 ## Voice commands
 
+The optional Wake Pi listener can be controlled from the menu bar, but the main voice experience is inside Pi Space. Click the microphone button beside the attachment, stop, and send buttons to open the animated voice stage. The stage shows **Listening…**, **Pi is thinking…**, or **Pi is speaking…**, and displays the words currently recognized while you talk.
+
 Install the optional listener with `./scripts/install.sh --with-wake-listener`. After granting Microphone and Speech Recognition access, the listener runs in the macOS menu bar.
 
 | Phrase | What it does |

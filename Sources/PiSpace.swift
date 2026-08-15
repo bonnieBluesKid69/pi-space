@@ -140,6 +140,7 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
   var pendingVoiceActions = [[String: String]]()
   let voiceNotification = Notification.Name("com.olivergreen.pispace.voice")
   let voiceResponseNotification = Notification.Name("com.olivergreen.pispace.voice.response")
+  let voiceStateNotification = Notification.Name("com.olivergreen.pispace.voice.state")
   let modelsURL = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".pi/agent/models.json")
   let managedModels: [[String: Any]] = [
     ["choice": "gpt-5.6-sol", "variant": "GPT-5.6 Sol", "provider": "agentrouter", "providerLabel": "AgentRouter", "id": "gpt-5.6-sol", "name": "gpt-5.6-sol"],
@@ -177,6 +178,8 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     super.viewDidLoad()
     DistributedNotificationCenter.default().addObserver(
       self, selector: #selector(receiveVoiceAction(_:)), name: voiceNotification, object: nil)
+    DistributedNotificationCenter.default().addObserver(
+      self, selector: #selector(receiveVoiceState(_:)), name: voiceStateNotification, object: nil)
     rpc.event = { [weak self] in self?.forward($0) }
     rpc.failure = { [weak self] in self?.js("appError", ["message": $0]) }
     guard let path = Bundle.main.path(forResource: "PiSpace", ofType: "html"),
@@ -187,6 +190,16 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     }
     web.loadHTMLString(html, baseURL: Bundle.main.resourceURL)
   }
+  private func sendVoiceControl(_ action: String) {
+    DistributedNotificationCenter.default().postNotificationName(
+      voiceNotification, object: nil, userInfo: ["action": action], deliverImmediately: true)
+  }
+
+  @objc func receiveVoiceState(_ notification: Notification) {
+    guard let info = notification.userInfo as? [String: String] else { return }
+    js("voiceState", info)
+  }
+
   @objc func receiveVoiceAction(_ notification: Notification) {
     guard let info = notification.userInfo as? [String: String], info["action"] != nil else { return }
     if !ready {
@@ -204,7 +217,6 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
         js("voicePrompt", ["text": text, "conversation": info["conversation"] == "true"])
       }
     case "abort": rpc.send(["type": "abort"])
-    case "summarize": js("voicePrompt", ["text": "Summarize this conversation so far in a concise spoken summary."])
     case "bed": rpc.send(["type": "abort"])
     default: break
     }
@@ -247,6 +259,8 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
   func userContentController(_ u: WKUserContentController, didReceive m: WKScriptMessage) {
     guard let b = m.body as? [String: Any], let a = b["action"] as? String else { return }
     switch a {
+    case "voiceStart": sendVoiceControl("start_conversation")
+    case "voiceEnd": sendVoiceControl("end_conversation")
     case "prompt":
       if let t = b["text"] as? String {
         let custom = instructions()

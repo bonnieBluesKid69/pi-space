@@ -25,6 +25,7 @@ final class WakeListener: NSObject, NSApplicationDelegate, NSSpeechSynthesizerDe
   private enum VoiceMode { case wakeWord, dictation, conversationListening, conversationWaiting }
   private let voiceNotification = Notification.Name("com.olivergreen.pispace.voice")
   private let responseNotification = Notification.Name("com.olivergreen.pispace.voice.response")
+  private let stateNotification = Notification.Name("com.olivergreen.pispace.voice.state")
   private let appCandidates = [
     URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Applications/Pi Space.app"),
     URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Desktop/Pi Space.app"),
@@ -40,6 +41,8 @@ final class WakeListener: NSObject, NSApplicationDelegate, NSSpeechSynthesizerDe
     speaker.delegate = self
     DistributedNotificationCenter.default().addObserver(
       self, selector: #selector(receiveVoiceResponse(_:)), name: responseNotification, object: nil)
+    DistributedNotificationCenter.default().addObserver(
+      self, selector: #selector(receiveVoiceControl(_:)), name: voiceNotification, object: nil)
     buildMenu()
     if paused {
       NSLog("Wake Pi listening is disabled")
@@ -177,6 +180,7 @@ final class WakeListener: NSObject, NSApplicationDelegate, NSSpeechSynthesizerDe
       return
     }
     NSLog("Speech recognition started in %@ mode", String(describing: voiceMode))
+    if voiceMode == .conversationListening { publishVoiceState("listening", text: "") }
     updateMenu("Listening for “wake up Pi”")
     task = recognizer?.recognitionTask(with: nextRequest) { [weak self] result, error in
       guard let self, generation == self.recognitionGeneration else { return }
@@ -286,6 +290,7 @@ final class WakeListener: NSObject, NSApplicationDelegate, NSSpeechSynthesizerDe
       return
     }
     conversationText = text
+    publishVoiceState("listening", text: text)
     updateMenu("Conversation: listening…")
     scheduleConversationSend(after: isFinal ? 0.35 : 1.5)
   }
@@ -311,6 +316,7 @@ final class WakeListener: NSObject, NSApplicationDelegate, NSSpeechSynthesizerDe
     voiceResponsePending = true
     recognitionGeneration += 1
     stopRecognition()
+    publishVoiceState("thinking", text: "")
     updateMenu("Conversation: Pi is thinking…")
     sendVoiceAction("prompt", text: clean, conversation: true)
   }
@@ -323,6 +329,7 @@ final class WakeListener: NSObject, NSApplicationDelegate, NSSpeechSynthesizerDe
     voiceResponsePending = false
     voiceMode = .conversationListening
     openPi()
+    publishVoiceState("listening", text: "")
     speak("Voice conversation started. What would you like to talk about?")
   }
 
@@ -335,7 +342,9 @@ final class WakeListener: NSObject, NSApplicationDelegate, NSSpeechSynthesizerDe
     voiceMode = .wakeWord
     recognitionGeneration += 1
     stopRecognition()
-    speak("Voice conversation ended.")
+    publishVoiceState("idle", text: "")
+    updateMenu("Listening for “wake up Pi”")
+    scheduleRestart(after: 0.25)
   }
 
   private func beginDictation() {
@@ -366,6 +375,24 @@ final class WakeListener: NSObject, NSApplicationDelegate, NSSpeechSynthesizerDe
       voiceNotification, object: nil, userInfo: info, deliverImmediately: true)
   }
 
+  private func publishVoiceState(_ state: String, text: String) {
+    DistributedNotificationCenter.default().postNotificationName(
+      stateNotification, object: nil, userInfo: ["state": state, "text": text], deliverImmediately: true)
+  }
+
+  @objc private func receiveVoiceControl(_ notification: Notification) {
+    guard let info = notification.userInfo as? [String: String], let action = info["action"] else { return }
+    if paused {
+      publishVoiceState("disabled", text: "Enable Listening Enabled in the Wake Pi menu first.")
+      return
+    }
+    if action == "start_conversation" {
+      startConversation()
+    } else if action == "end_conversation" {
+      endConversation()
+    }
+  }
+
   @objc private func receiveVoiceResponse(_ notification: Notification) {
     guard let info = notification.userInfo as? [String: String], let text = info["text"], !text.isEmpty else { return }
     lastResponse = text
@@ -382,6 +409,7 @@ final class WakeListener: NSObject, NSApplicationDelegate, NSSpeechSynthesizerDe
     restartWork?.cancel()
     stopRecognition()
     speaker.stopSpeaking()
+    publishVoiceState("speaking", text: cleaned)
     speaker.startSpeaking(cleaned)
   }
 
@@ -390,6 +418,9 @@ final class WakeListener: NSObject, NSApplicationDelegate, NSSpeechSynthesizerDe
     if voiceMode == .conversationWaiting {
       voiceMode = .conversationListening
       conversationText = ""
+      publishVoiceState("listening", text: "")
+    } else if voiceMode == .conversationListening {
+      publishVoiceState("listening", text: "")
     }
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
       guard let self, !self.engine.isRunning else { return }
