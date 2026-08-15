@@ -957,10 +957,21 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     UserDefaults.standard.set(selectedProvider, forKey: "PiSpaceProvider")
     UserDefaults.standard.set(selectedModel, forKey: "PiSpaceModel")
   }
+  func modelPresentation(_ model: [String: Any]) -> [String: Any] {
+    var value = model
+    let provider = model["provider"] as? String ?? ""
+    let id = model["id"] as? String ?? ""
+    value["contextWindow"] = provider == "agentrouter" ? 128_000 : 200_000
+    value["maxOutputTokens"] = provider == "agentrouter" ? 16_384 : 32_768
+    value["reasoning"] = provider != "tabitoken" || id.hasSuffix("-thinking")
+    value["inputModes"] = ["Text", "Images"]
+    return value
+  }
+
   func syncProviderSettings(message: String? = nil, success: Bool = true) {
     let config = readModelsConfig()
     var payload: [String: Any] = [
-      "models": managedModels,
+      "models": managedModels.map(modelPresentation),
       "agentRouterConfigured": providerConfigured("agentrouter", config: config),
       "tokenRouterConfigured": providerConfigured("tokenrouter", config: config),
       "tabiTokenConfigured": providerConfigured("tabitoken", config: config),
