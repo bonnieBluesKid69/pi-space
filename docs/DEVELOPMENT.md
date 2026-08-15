@@ -43,7 +43,7 @@ dotnet build Platforms/Windows/PiSpace.Windows.csproj --configuration Release
 dotnet run --project Platforms/Windows/PiSpace.Windows.csproj
 ```
 
-The hosted `windows` CI job compiles and publishes a framework-dependent `win-x64` build. Do not distribute an unsigned executable as a trusted release; release packaging and signing remain separate work.
+The hosted `windows` CI job compiles and publishes a framework-dependent `win-x64` build, then uploads it as the `Pi-Space-Windows-x64` workflow artifact for 14 days. See [WINDOWS.md](WINDOWS.md) for installation, first-run, update, troubleshooting, and security guidance. Do not distribute an unsigned executable as a trusted release; release packaging and signing remain separate work.
 
 ## Prerequisites
 

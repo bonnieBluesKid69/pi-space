@@ -1,29 +1,39 @@
 # Pi Space
 
-Pi Space is a small native macOS interface for the [Pi coding agent](https://github.com/earendil-works/pi). It runs Pi in RPC mode and presents chats, tool activity, saved sessions, model selection, thinking levels, workspaces, and persistent custom instructions in a desktop window.
+Pi Space is a local desktop interface for the [Pi coding agent](https://github.com/earendil-works/pi). It runs Pi in RPC mode and presents chats, tool activity, saved sessions, model selection, thinking levels, workspaces, and persistent custom instructions in a desktop window.
+
+The macOS app is the current full-featured version. A native Windows WebView2 preview is available for the core text-agent workflow.
 
 > [!IMPORTANT]
 > Pi Space is a client for Pi, not a separate AI service. You must install Pi and authenticate a supported model provider before using the app.
 
 ## What it includes
 
-- Native Swift/AppKit application with a WebKit interface
+- Shared desktop interface with native macOS and Windows hosts
 - Streaming assistant text, reasoning, and tool output
 - Saved Pi session browser
 - Workspace switching
 - Model and thinking-level selectors
 - Locally stored custom instructions
-- Optional menu-bar voice listener for wake words, dictation, and one-on-one voice conversations
+- Drag-and-drop and native file attachments
+- In-app voice, local Kokoro speech, and optional menu-bar wake listener on macOS
 - Universal macOS builds for Apple silicon and Intel
+- Native Windows x64 WebView2 preview for text chat and tools
 
-## Requirements
+## Platform guides
+
+- **macOS:** follow the quick start below.
+- **Windows 10/11:** see the [Windows installation guide](docs/WINDOWS.md).
+- **Linux:** not available yet; the shared host bridge is ready for a future native adapter.
+
+## macOS requirements
 
 - macOS 13 Ventura or newer
 - [Node.js](https://nodejs.org/) 22.19 or newer
 - Pi coding agent
 - Xcode Command Line Tools when building from source
 
-## Quick start
+## macOS quick start
 
 ### 1. Install and configure Pi
 
@@ -54,7 +64,7 @@ To include the optional voice listener:
 
 The listener asks for Microphone and Speech Recognition access when first opened. It runs in the menu bar. Click the menu-bar icon and use **Listening Enabled** to turn microphone recognition on or off; the setting persists across relaunches. When it is off, Wake Pi does not access the microphone or Speech Recognition service. Use **Start Voice Conversation** for a continuous back-and-forth conversation with Pi, or **End Voice Conversation** to stop it.
 
-## Updating
+## macOS updating
 
 From the existing Pi Space Git checkout, run:
 
@@ -129,7 +139,7 @@ Pi runs local tools with your user account's permissions. Selecting a workspace 
 
 Read [SECURITY.md](SECURITY.md) before using Pi Space on sensitive or untrusted projects.
 
-## Build from source
+## macOS build from source
 
 ```bash
 make check       # Type-check sources and scan for accidentally committed secrets
@@ -141,7 +151,7 @@ make package     # Create ZIP archives and checksums in release/
 
 For architecture, signing, release, and development details, see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
-## Uninstall
+## macOS uninstall
 
 ```bash
 ./scripts/uninstall.sh
@@ -151,4 +161,6 @@ This removes the apps but preserves Pi's configuration, credentials, instruction
 
 ## Project status
 
-Pi Space is an independent community client and is not affiliated with or endorsed by the Pi project. The current UI covers the main chat workflow. RPC extension dialogs are not yet rendered; Pi Space cancels those requests and shows an error rather than accepting them silently.
+Pi Space is an independent community client and is not affiliated with or endorsed by the Pi project. macOS is the primary, full-featured platform. The Windows x64 build is a source-available preview for text chat, Pi RPC tools, sessions, workspaces, attachments, and settings; voice features and a signed installer are not available on Windows yet.
+
+The current UI does not render RPC extension dialogs. Pi Space cancels those requests and shows an error rather than accepting them silently.

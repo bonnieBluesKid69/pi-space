@@ -47,3 +47,10 @@ jobs:
           if (!(Test-Path "dist/windows/PiSpace.exe")) { throw "PiSpace.exe was not published" }
           if (!(Test-Path "dist/windows/Resources/PiSpace.html")) { throw "Shared UI was not published" }
           if (!(Test-Path "dist/windows/Resources/pi-space-bridge.js")) { throw "Shared bridge was not published" }
+      - name: Upload Windows preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pi-Space-Windows-x64
+          path: dist/windows
+          if-no-files-found: error
+          retention-days: 14
