@@ -21,7 +21,7 @@
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Pi Space uses the microphone during an in-app voice conversation.</string>
+	<string>Pi Space uses the microphone for voice conversations and the optional in-app “wake up Pi” phrase.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Pi Space converts your speech into prompts during an in-app voice conversation.</string>
 	<key>NSHighResolutionCapable</key>

@@ -100,7 +100,7 @@ Commands are handled locally by Pi Space unless marked **Pi RPC**. Slash command
 | `/export` | `[path]` | Exports the current session as HTML. **Pi RPC** |
 | `/auto-compact` | `on` or `off` | Enables or disables automatic context compaction. **Pi RPC** |
 | `/auto-retry` | `on` or `off` | Enables or disables automatic retry. **Pi RPC** |
-| `/voice` | none | Shows the Wake Pi voice command list. |
+| `/voice` | none | Shows the in-app voice controls and wake phrases. |
 
 Type `/` in the composer to open autocomplete. Use the arrow keys to move through suggestions, Enter or Tab to select one, and Escape to dismiss the palette.
 
@@ -108,23 +108,18 @@ Type `/` in the composer to open autocomplete. Use the arrow keys to move throug
 
 The microphone button in Pi Space starts the voice conversation directly. Pi Space requests its own Microphone and Speech Recognition permissions, listens while the voice stage is open, sends each turn after a short pause, and speaks the response. **End conversation** stops recognition and speech immediately, including while Pi is still generating a response.
 
-Wake Pi Listener remains an optional separate menu-bar utility for global wake-word control; it is not required for the in-app voice button.
+In **Settings → Voice**, install Kokoro once, choose one of its local neural voices, and preview it. Kokoro is free and open, needs no API key or account, and runs entirely on Apple Silicon after the initial download of roughly 350 MB. Pi Space starts the model only for voice playback and stops it when voice mode ends. The default voice is **Heart — warm**.
 
-Install the optional listener with `./scripts/install.sh --with-wake-listener`. After granting Microphone and Speech Recognition access, the listener runs in the macOS menu bar.
+The **Wake phrases** toggle enables only these two phrases:
 
-| Phrase | What it does |
+| Phrase | Action |
 | --- | --- |
-| “Wake up Pi” | Opens Pi Space and starts voice dictation. |
-| “Send it” | Sends the dictated prompt to the active local RPC session. |
-| “Cancel” | Discards the current dictated prompt. |
-| “Stop Pi” | Aborts the active Pi response. |
-| “Repeat that” | Speaks the last assistant response aloud. |
-| “Summarize this” | Requests a concise spoken summary from Pi. |
-| “Time for bed Pi” | Aborts active work and closes Pi Space. |
-| **Start Voice Conversation** | Starts a continuous spoken conversation from the Wake Pi menu. |
-| “Goodbye Pi” | Ends continuous voice conversation and returns to wake-word mode. |
+| “Wake up Pi” | Brings Pi Space forward and starts an in-app voice conversation. |
+| “Go to sleep Pi” | Ends voice mode and returns to passive wake listening. |
 
-Voice actions communicate through local macOS distributed notifications. No network listener is opened by Wake Pi.
+Turning **Wake phrases** off stops passive microphone recognition immediately. Wake phrases work while Pi Space is running, including when its window is closed; they cannot work after Pi Space is fully quit without a separate background helper.
+
+Wake Pi Listener remains an optional separate menu-bar utility for users who explicitly need wake-word behavior after Pi Space quits. It is not required for normal in-app voice or wake phrases while Pi Space is running.
 
 ## Security
 

@@ -129,10 +129,12 @@ final class RPC {
   }
 }
 
-final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate {
+final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegate {
   var onState: ((String, String) -> Void)?
   var onPrompt: ((String) -> Void)?
   var onAbort: (() -> Void)?
+  var onWake: (() -> Void)?
+  var onSettingsChanged: (() -> Void)?
 
   private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-AU"))
   private let engine = AVAudioEngine()
@@ -140,90 +142,335 @@ final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate {
   private var request: SFSpeechAudioBufferRecognitionRequest?
   private var task: SFSpeechRecognitionTask?
   private var silenceWork: DispatchWorkItem?
+  private var restartWork: DispatchWorkItem?
   private var generation = 0
-  private var active = false
-  private var waiting = false
   private var transcript = ""
   private var tapInstalled = false
+  private var kokoroProcess: Process?
+  private var kokoroPlayer: AVAudioPlayer?
+  private var kokoroAudioURL: URL?
+  private let kokoroRoot = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support/Pi Space/kokoro")
+  private enum Mode { case idle, wake, conversation, waiting, speaking, preview }
+  private var mode: Mode = .idle
+  private let wakeKey = "PiSpaceWakePhrasesEnabled"
+  private let voiceKey = "PiSpaceVoiceIdentifier"
+
+  var wakeEnabled: Bool { UserDefaults.standard.bool(forKey: wakeKey) }
+  var selectedVoiceIdentifier: String {
+    UserDefaults.standard.string(forKey: voiceKey) ?? preferredVoice()?.identifier ?? ""
+  }
+
+  var kokoroInstalled: Bool {
+    FileManager.default.fileExists(atPath: kokoroRoot.appendingPathComponent("status").path)
+      && FileManager.default.fileExists(atPath: kokoroRoot.appendingPathComponent("python-path").path)
+  }
+  var kokoroVoice = UserDefaults.standard.string(forKey: "PiSpaceKokoroVoice") ?? "af_heart"
 
   override init() {
     super.init()
     speaker.delegate = self
   }
 
+  func setKokoroVoice(_ voice: String) {
+    kokoroVoice = voice
+    UserDefaults.standard.set(voice, forKey: "PiSpaceKokoroVoice")
+    onSettingsChanged?()
+  }
+
+  func installKokoro() {
+    guard kokoroProcess == nil else { return }
+    guard let script = Bundle.main.path(forResource: "install-kokoro", ofType: "sh") else {
+      onState?("error", "The Kokoro installer is missing from this build.")
+      return
+    }
+    onState?("starting", "Installing Kokoro. The free local model is about 350 MB…")
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/bin/bash")
+    process.arguments = [script]
+    process.standardOutput = FileHandle.nullDevice
+    process.standardError = FileHandle.nullDevice
+    process.terminationHandler = { [weak self] process in
+      DispatchQueue.main.async {
+        self?.kokoroProcess = nil
+        if process.terminationStatus == 0 {
+          self?.onState?("idle", "Kokoro is ready.")
+          self?.onSettingsChanged?()
+        } else {
+          self?.onState?("error", "Kokoro installation failed. Check your internet connection and try again.")
+        }
+      }
+    }
+    do {
+      try process.run()
+      kokoroProcess = process
+    } catch {
+      onState?("error", "Could not start the Kokoro installer: \(error.localizedDescription)")
+    }
+  }
+
+  func stopKokoro() {
+    kokoroProcess?.terminate()
+    kokoroProcess = nil
+    kokoroPlayer?.stop()
+    kokoroPlayer = nil
+  }
+
+  func shutdown() {
+    mode = .idle
+    generation += 1
+    silenceWork?.cancel()
+    restartWork?.cancel()
+    stopRecognition()
+    speaker.stopSpeaking(at: .immediate)
+    kokoroPlayer?.stop()
+    kokoroPlayer = nil
+    if let kokoroAudioURL { try? FileManager.default.removeItem(at: kokoroAudioURL) }
+    kokoroAudioURL = nil
+    stopKokoroServer()
+    kokoroProcess?.terminate()
+    kokoroProcess = nil
+  }
+
+  func startWakeListenerIfEnabled() {
+    guard wakeEnabled, mode == .idle else { return }
+    requestPermissions { [weak self] in self?.startRecognition(.wake) }
+  }
+
+  func setWakeEnabled(_ enabled: Bool) {
+    UserDefaults.standard.set(enabled, forKey: wakeKey)
+    if enabled {
+      if mode == .idle { startWakeListenerIfEnabled() }
+    } else if mode != .idle {
+      end()
+    }
+    onSettingsChanged?()
+  }
+
+  func setVoice(identifier: String) {
+    guard AVSpeechSynthesisVoice(identifier: identifier) != nil else { return }
+    UserDefaults.standard.set(identifier, forKey: voiceKey)
+    onSettingsChanged?()
+  }
+
+  func previewVoice() {
+    guard mode == .idle || mode == .wake else { return }
+    generation += 1
+    stopRecognition()
+    mode = .preview
+    if kokoroInstalled {
+      speakWithKokoro("Hi, I’m Pi. This is how I’ll sound during voice conversations.")
+      return
+    }
+    let utterance = AVSpeechUtterance(string: "Kokoro is not installed yet. Install it for a natural local voice.")
+    utterance.rate = 0.48
+    utterance.voice = AVSpeechSynthesisVoice(identifier: selectedVoiceIdentifier) ?? preferredVoice()
+    speaker.speak(utterance)
+  }
+
+  func availableVoices() -> [[String: Any]] {
+    let voices = AVSpeechSynthesisVoice.speechVoices().filter { $0.language.hasPrefix("en") }
+      .sorted {
+        if $0.quality.rawValue != $1.quality.rawValue { return $0.quality.rawValue > $1.quality.rawValue }
+        return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+      }
+    return voices.map { voice in
+      let quality = voice.quality == .premium ? "Premium" : voice.quality == .enhanced ? "Enhanced" : "Standard"
+      return ["id": voice.identifier, "name": "\(voice.name) · \(voice.language) · \(quality)"]
+    }
+  }
+
   func start() {
-    guard !active else { return }
-    active = true
-    waiting = false
+    guard mode == .idle || mode == .wake else { return }
+    generation += 1
+    stopRecognition()
+    mode = .conversation
     transcript = ""
     onState?("starting", "Requesting microphone access…")
-    SFSpeechRecognizer.requestAuthorization { [weak self] speechStatus in
-      guard let self else { return }
+    requestPermissions { [weak self] in self?.startRecognition(.conversation) }
+  }
+
+  func end(abortResponse: Bool = true) {
+    let shouldAbort = mode == .waiting && abortResponse
+    mode = .idle
+    transcript = ""
+    generation += 1
+    silenceWork?.cancel()
+    restartWork?.cancel()
+    silenceWork = nil
+    restartWork = nil
+    kokoroPlayer?.stop()
+    kokoroPlayer = nil
+    if let kokoroAudioURL { try? FileManager.default.removeItem(at: kokoroAudioURL) }
+    kokoroAudioURL = nil
+    stopKokoroServer()
+    speaker.stopSpeaking(at: .immediate)
+    stopRecognition()
+    onState?("idle", "")
+    if shouldAbort { onAbort?() }
+    if wakeEnabled {
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+        self?.startWakeListenerIfEnabled()
+      }
+    }
+  }
+
+  func receiveResponse(_ text: String) {
+    guard mode == .waiting else { return }
+    let clean = text.replacingOccurrences(of: "`", with: "")
+      .replacingOccurrences(of: "**", with: "")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !clean.isEmpty else {
+      mode = .conversation
+      startRecognition(.conversation)
+      return
+    }
+    generation += 1
+    stopRecognition()
+    mode = .speaking
+    onState?("speaking", clean)
+    if kokoroInstalled {
+      speakWithKokoro(clean)
+    } else {
+      speakWithSystemVoice(clean)
+    }
+  }
+
+  private func speakWithSystemVoice(_ text: String) {
+    speaker.stopSpeaking(at: .immediate)
+    let utterance = AVSpeechUtterance(string: text)
+    utterance.rate = 0.48
+    utterance.voice = AVSpeechSynthesisVoice(identifier: selectedVoiceIdentifier) ?? preferredVoice()
+    speaker.speak(utterance)
+  }
+
+  private func startKokoroServer(_ completion: @escaping (Bool) -> Void) {
+    let socket = kokoroRoot.appendingPathComponent("tts.sock")
+    if FileManager.default.fileExists(atPath: socket.path), kokoroProcess?.isRunning == true {
+      completion(true)
+      return
+    }
+    guard let python = try? String(contentsOf: kokoroRoot.appendingPathComponent("python-path"), encoding: .utf8)
+      .trimmingCharacters(in: .whitespacesAndNewlines), !python.isEmpty else { completion(false); return }
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: python)
+    process.arguments = [kokoroRoot.appendingPathComponent("tts-server.py").path]
+    process.standardOutput = FileHandle.nullDevice
+    process.standardError = FileHandle.nullDevice
+    do {
+      try? FileManager.default.removeItem(at: socket)
+      try process.run()
+      kokoroProcess = process
+    } catch { completion(false); return }
+    func poll(_ remaining: Int) {
+      if FileManager.default.fileExists(atPath: socket.path) { completion(true); return }
+      if remaining == 0 || process.isRunning == false { completion(false); return }
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { poll(remaining - 1) }
+    }
+    poll(60)
+  }
+
+  private func speakWithKokoro(_ text: String) {
+    let expectedMode = mode
+    startKokoroServer { [weak self] ready in
+      guard let self, self.mode == expectedMode else { return }
+      guard ready else { self.speakWithSystemVoice(text); return }
+      let request: [String: Any] = ["text": text, "voice": self.kokoroVoice, "speed": 1.0]
+      guard let data = try? JSONSerialization.data(withJSONObject: request),
+        let json = String(data: data, encoding: .utf8) else { self.speakWithSystemVoice(text); return }
+      let client = Process()
+      let output = Pipe()
+      client.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+      client.arguments = ["-c", "import socket,sys;s=socket.socket(socket.AF_UNIX);s.settimeout(180);s.connect(sys.argv[1]);s.sendall((sys.argv[2]+'\\n').encode());d=b''\nwhile b'\\n' not in d:\n c=s.recv(4096)\n if not c: break\n d+=c\nprint(d.decode().strip())", self.kokoroRoot.appendingPathComponent("tts.sock").path, json]
+      client.standardOutput = output
+      client.standardError = FileHandle.nullDevice
+      client.terminationHandler = { [weak self] _ in
+        let result = output.fileHandleForReading.readDataToEndOfFile()
+        DispatchQueue.main.async {
+          guard let self, self.mode == expectedMode,
+            let object = try? JSONSerialization.jsonObject(with: result) as? [String: Any],
+            object["status"] as? String == "ok", let path = object["audio_file"] as? String,
+            let player = try? AVAudioPlayer(contentsOf: URL(fileURLWithPath: path))
+          else { self?.speakWithSystemVoice(text); return }
+          self.kokoroPlayer = player
+          self.kokoroAudioURL = URL(fileURLWithPath: path)
+          player.delegate = self
+          player.play()
+        }
+      }
+      do { try client.run() } catch { self.speakWithSystemVoice(text) }
+    }
+  }
+
+  private func stopKokoroServer() {
+    kokoroProcess?.terminate()
+    kokoroProcess = nil
+    try? FileManager.default.removeItem(at: kokoroRoot.appendingPathComponent("tts.sock"))
+  }
+
+  func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+    if mode == .preview {
+      kokoroPlayer = nil
+      if let kokoroAudioURL { try? FileManager.default.removeItem(at: kokoroAudioURL) }
+      kokoroAudioURL = nil
+      stopKokoroServer()
+      mode = .idle
+      startWakeListenerIfEnabled()
+      return
+    }
+    guard mode == .speaking else { return }
+    kokoroPlayer = nil
+    if let kokoroAudioURL { try? FileManager.default.removeItem(at: kokoroAudioURL) }
+    kokoroAudioURL = nil
+    mode = .conversation
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+      self?.startRecognition(.conversation)
+    }
+  }
+
+  private func preferredVoice() -> AVSpeechSynthesisVoice? {
+    let preferredNames = ["Ava", "Samantha", "Karen", "Daniel"]
+    return AVSpeechSynthesisVoice.speechVoices().filter { $0.language.hasPrefix("en") }.max {
+      let left = ($0.quality.rawValue * 100) + (preferredNames.firstIndex(of: $0.name).map { 20 - $0 } ?? 0)
+      let right = ($1.quality.rawValue * 100) + (preferredNames.firstIndex(of: $1.name).map { 20 - $0 } ?? 0)
+      return left < right
+    }
+  }
+
+  private func requestPermissions(_ completion: @escaping () -> Void) {
+    SFSpeechRecognizer.requestAuthorization { speechStatus in
       AVCaptureDevice.requestAccess(for: .audio) { microphoneGranted in
         DispatchQueue.main.async {
-          guard self.active else { return }
           guard speechStatus == .authorized, microphoneGranted else {
-            self.end(abortResponse: false)
+            self.mode = .idle
+            self.stopRecognition()
             self.onState?("error", "Allow Microphone and Speech Recognition for Pi Space in System Settings.")
             return
           }
-          self.startRecognition()
+          completion()
         }
       }
     }
   }
 
-  func end(abortResponse: Bool = true) {
-    let shouldAbort = active && waiting && abortResponse
-    active = false
-    waiting = false
-    transcript = ""
-    generation += 1
-    silenceWork?.cancel()
-    silenceWork = nil
-    speaker.stopSpeaking(at: .immediate)
-    stopRecognition()
-    onState?("idle", "")
-    if shouldAbort { onAbort?() }
-  }
-
-  func receiveResponse(_ text: String) {
-    guard active, waiting else { return }
-    let clean = text.replacingOccurrences(of: "`", with: "")
-      .replacingOccurrences(of: "**", with: "")
-      .trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !clean.isEmpty else {
-      waiting = false
-      startRecognition()
-      return
-    }
-    waiting = false
-    generation += 1
-    stopRecognition()
-    onState?("speaking", clean)
-    speaker.stopSpeaking(at: .immediate)
-    let utterance = AVSpeechUtterance(string: clean)
-    utterance.rate = 0.5
-    speaker.speak(utterance)
-  }
-
-  private func startRecognition() {
-    guard active, !waiting, !speaker.isSpeaking else { return }
+  private func startRecognition(_ targetMode: Mode) {
+    guard targetMode == .wake ? (wakeEnabled && (mode == .idle || mode == .wake)) : mode == .conversation else { return }
     generation += 1
     let currentGeneration = generation
     stopRecognition()
     transcript = ""
+    mode = targetMode
 
     let node = engine.inputNode
     let format = node.outputFormat(forBus: 0)
     guard format.sampleRate > 0, format.channelCount > 0 else {
-      onState?("error", "The microphone is not available.")
+      if targetMode == .conversation { onState?("error", "The microphone is not available.") }
       return
     }
     let nextRequest = SFSpeechAudioBufferRecognitionRequest()
     nextRequest.shouldReportPartialResults = true
-    nextRequest.taskHint = .dictation
-    nextRequest.contextualStrings = ["goodbye Pi", "end conversation", "stop conversation"]
+    nextRequest.taskHint = targetMode == .wake ? .confirmation : .dictation
+    nextRequest.contextualStrings = targetMode == .wake
+      ? ["wake up Pi"] : ["go to sleep Pi"]
     request = nextRequest
     node.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
       nextRequest.append(buffer)
@@ -234,32 +481,41 @@ final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate {
       try engine.start()
     } catch {
       stopRecognition()
-      onState?("error", "Could not start the microphone: \(error.localizedDescription)")
+      if targetMode == .conversation { onState?("error", "Could not start the microphone: \(error.localizedDescription)") }
+      else { scheduleRestart(targetMode, after: 3) }
       return
     }
-    onState?("listening", "")
+    if targetMode == .conversation { onState?("listening", "") }
     task = recognizer?.recognitionTask(with: nextRequest) { [weak self] result, error in
       DispatchQueue.main.async {
-        guard let self, self.active, currentGeneration == self.generation else { return }
+        guard let self, currentGeneration == self.generation, self.mode == targetMode else { return }
         if let result { self.receiveTranscription(result.bestTranscription.formattedString, final: result.isFinal) }
-        if let error, !self.waiting {
-          self.stopRecognition()
-          self.onState?("error", "Speech Recognition stopped: \(error.localizedDescription)")
+        if error != nil || result?.isFinal == true {
+          if targetMode == .wake { self.scheduleRestart(targetMode, after: 1.2) }
+          else if error != nil && self.mode == .conversation {
+            self.stopRecognition()
+            self.onState?("error", "Speech Recognition stopped. Click End conversation and try again.")
+          }
         }
       }
     }
   }
 
   private func receiveTranscription(_ value: String, final: Bool) {
-    guard active, !waiting else { return }
     let clean = value.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !clean.isEmpty else { return }
     let normalized = clean.lowercased()
       .replacingOccurrences(of: "[^a-z0-9]+", with: " ", options: .regularExpression)
       .trimmingCharacters(in: .whitespacesAndNewlines)
-    if normalized.contains("goodbye pi") || normalized.contains("good bye pi")
-      || normalized.contains("end conversation") || normalized.contains("stop conversation")
-    {
+    if mode == .wake {
+      if normalized.contains("wake up pi") || normalized.contains("wake up pie") {
+        onWake?()
+        start()
+      }
+      return
+    }
+    guard mode == .conversation else { return }
+    if normalized.contains("go to sleep pi") || normalized.contains("go to sleep pie") {
       end()
       return
     }
@@ -272,10 +528,10 @@ final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate {
     silenceWork?.cancel()
     let expected = transcript
     let work = DispatchWorkItem { [weak self] in
-      guard let self, self.active, !self.waiting, self.transcript == expected else { return }
+      guard let self, self.mode == .conversation, self.transcript == expected else { return }
       let clean = expected.trimmingCharacters(in: .whitespacesAndNewlines)
       guard !clean.isEmpty else { return }
-      self.waiting = true
+      self.mode = .waiting
       self.transcript = ""
       self.generation += 1
       self.stopRecognition()
@@ -283,6 +539,16 @@ final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate {
       self.onPrompt?(clean)
     }
     silenceWork = work
+    DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+  }
+
+  private func scheduleRestart(_ targetMode: Mode, after delay: TimeInterval) {
+    restartWork?.cancel()
+    let work = DispatchWorkItem { [weak self] in
+      guard let self else { return }
+      if targetMode == .wake, self.wakeEnabled, self.mode == .wake { self.startRecognition(.wake) }
+    }
+    restartWork = work
     DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
   }
 
@@ -299,9 +565,15 @@ final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate {
   }
 
   func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-    guard active else { return }
+    if mode == .preview {
+      mode = .idle
+      startWakeListenerIfEnabled()
+      return
+    }
+    guard mode == .speaking else { return }
+    mode = .conversation
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
-      self?.startRecognition()
+      self?.startRecognition(.conversation)
     }
   }
 }
@@ -355,6 +627,7 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
   }
   override func viewDidLoad() {
     super.viewDidLoad()
+    UserDefaults.standard.register(defaults: ["PiSpaceWakePhrasesEnabled": true])
     DistributedNotificationCenter.default().addObserver(
       self, selector: #selector(receiveVoiceAction(_:)), name: voiceNotification, object: nil)
     voice.onState = { [weak self] state, text in self?.js("voiceState", ["state": state, "text": text]) }
@@ -362,6 +635,11 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
       self?.js("voicePrompt", ["text": text, "conversation": true])
     }
     voice.onAbort = { [weak self] in self?.rpc.send(["type": "abort"]) }
+    voice.onWake = { [weak self] in
+      self?.view.window?.makeKeyAndOrderFront(nil)
+      NSApp.activate(ignoringOtherApps: true)
+    }
+    voice.onSettingsChanged = { [weak self] in self?.syncProviderSettings() }
     rpc.event = { [weak self] in self?.forward($0) }
     rpc.failure = { [weak self] in self?.js("appError", ["message": $0]) }
     guard let path = Bundle.main.path(forResource: "PiSpace", ofType: "html"),
@@ -426,6 +704,7 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     ensureManagedModels()
     chooseInitialModel()
     syncProviderSettings()
+    voice.startWakeListenerIfEnabled()
     rpc.start(cwd, continuing: false, provider: selectedProvider, model: selectedModel)
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in self?.refresh() }
   }
@@ -434,6 +713,18 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     switch a {
     case "voiceStart": voice.start()
     case "voiceEnd": voice.end()
+    case "setWakePhrases":
+      if let enabled = b["enabled"] as? Bool { voice.setWakeEnabled(enabled) }
+    case "setVoice":
+      if let identifier = b["identifier"] as? String { voice.setVoice(identifier: identifier) }
+    case "setKokoroVoice":
+      if let identifier = b["identifier"] as? String { voice.setKokoroVoice(identifier) }
+    case "installKokoro": voice.installKokoro()
+    case "openVoiceSettings":
+      if let url = URL(string: "x-apple.systempreferences:com.apple.preference.universalaccess?Spoken_Content") {
+        NSWorkspace.shared.open(url)
+      }
+    case "previewVoice": voice.previewVoice()
     case "prompt":
       if let t = b["text"] as? String {
         let custom = instructions()
@@ -612,6 +903,19 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
       "tabiTokenBaseURL": ((config["providers"] as? [String: Any])?["tabitoken"] as? [String: Any])?["baseUrl"] as? String ?? defaultTabiTokenBaseURL,
       "selectedProvider": selectedProvider ?? "",
       "selectedModel": selectedModel ?? "",
+      "wakePhrasesEnabled": voice.wakeEnabled,
+      "voiceIdentifier": voice.selectedVoiceIdentifier,
+      "voices": voice.availableVoices(),
+      "kokoroInstalled": voice.kokoroInstalled,
+      "kokoroVoice": voice.kokoroVoice,
+      "kokoroVoices": [
+        ["name": "Heart — warm", "id": "af_heart"], ["name": "Bella — soft", "id": "af_bella"],
+        ["name": "Nova — confident", "id": "af_nova"], ["name": "Sarah — gentle", "id": "af_sarah"],
+        ["name": "Sky — bright", "id": "af_sky"], ["name": "Adam — deep", "id": "am_adam"],
+        ["name": "Echo — clear", "id": "am_echo"], ["name": "Eric — steady", "id": "am_eric"],
+        ["name": "Michael — warm", "id": "am_michael"], ["name": "Lily — British, bright", "id": "bf_lily"],
+        ["name": "Emma — British, warm", "id": "bf_emma"], ["name": "George — British, deep", "id": "bm_george"],
+      ],
       "success": success,
     ]
     if let message { payload["message"] = message }
@@ -980,6 +1284,10 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
       rpc.send(["type": "get_session_stats"])
     }
   }
+  func voiceSettingsDidChangeExternally() {
+    syncProviderSettings()
+  }
+
   func js(_ f: String, _ x: [String: Any]) {
     guard ready, let data = try? JSONSerialization.data(withJSONObject: x),
       let payload = String(data: data, encoding: .utf8)
@@ -989,6 +1297,7 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
   }
   deinit {
     DistributedNotificationCenter.default().removeObserver(self)
+    voice.shutdown()
     rpc.stop()
   }
 }
@@ -1014,6 +1323,9 @@ final class Delegate: NSObject, NSApplicationDelegate {
     window.makeKeyAndOrderFront(nil)
     NSApp.activate(ignoringOtherApps: true)
     return true
+  }
+  func applicationDidBecomeActive(_ notification: Notification) {
+    (window.contentViewController as? Controller)?.voiceSettingsDidChangeExternally()
   }
   func applicationShouldTerminateAfterLastWindowClosed(_ s: NSApplication) -> Bool { false }
 }

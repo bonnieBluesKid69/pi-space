@@ -105,7 +105,8 @@ build_pi() {
   compile_universal "$ROOT/Sources/PiSpace.swift" "$app/Contents/MacOS/PiSpace" AppKit AVFoundation Speech WebKit
   cp "$ROOT/Resources/Info.plist" "$app/Contents/Info.plist"
   cp "$ROOT/Resources/PiSpace.html" "$ROOT/Resources/PiSpace.icns" \
-    "$ROOT/Resources/THIRD-PARTY-NOTICES.txt" "$app/Contents/Resources/"
+    "$ROOT/Resources/THIRD-PARTY-NOTICES.txt" "$ROOT/Resources/kokoro-tts-server.py" \
+    "$ROOT/scripts/install-kokoro.sh" "$app/Contents/Resources/"
   cp -R "$ROOT/Resources/vendor" "$app/Contents/Resources/"
   sign_bundle "$app"
   echo "Built $app"
