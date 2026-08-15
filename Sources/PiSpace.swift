@@ -1,6 +1,8 @@
+import AVFoundation
 import AppKit
 import Darwin
 import Foundation
+import Speech
 import WebKit
 
 final class RPC {
@@ -127,6 +129,183 @@ final class RPC {
   }
 }
 
+final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate {
+  var onState: ((String, String) -> Void)?
+  var onPrompt: ((String) -> Void)?
+  var onAbort: (() -> Void)?
+
+  private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-AU"))
+  private let engine = AVAudioEngine()
+  private let speaker = AVSpeechSynthesizer()
+  private var request: SFSpeechAudioBufferRecognitionRequest?
+  private var task: SFSpeechRecognitionTask?
+  private var silenceWork: DispatchWorkItem?
+  private var generation = 0
+  private var active = false
+  private var waiting = false
+  private var transcript = ""
+  private var tapInstalled = false
+
+  override init() {
+    super.init()
+    speaker.delegate = self
+  }
+
+  func start() {
+    guard !active else { return }
+    active = true
+    waiting = false
+    transcript = ""
+    onState?("starting", "Requesting microphone access…")
+    SFSpeechRecognizer.requestAuthorization { [weak self] speechStatus in
+      guard let self else { return }
+      AVCaptureDevice.requestAccess(for: .audio) { microphoneGranted in
+        DispatchQueue.main.async {
+          guard self.active else { return }
+          guard speechStatus == .authorized, microphoneGranted else {
+            self.end(abortResponse: false)
+            self.onState?("error", "Allow Microphone and Speech Recognition for Pi Space in System Settings.")
+            return
+          }
+          self.startRecognition()
+        }
+      }
+    }
+  }
+
+  func end(abortResponse: Bool = true) {
+    let shouldAbort = active && waiting && abortResponse
+    active = false
+    waiting = false
+    transcript = ""
+    generation += 1
+    silenceWork?.cancel()
+    silenceWork = nil
+    speaker.stopSpeaking(at: .immediate)
+    stopRecognition()
+    onState?("idle", "")
+    if shouldAbort { onAbort?() }
+  }
+
+  func receiveResponse(_ text: String) {
+    guard active, waiting else { return }
+    let clean = text.replacingOccurrences(of: "`", with: "")
+      .replacingOccurrences(of: "**", with: "")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !clean.isEmpty else {
+      waiting = false
+      startRecognition()
+      return
+    }
+    waiting = false
+    generation += 1
+    stopRecognition()
+    onState?("speaking", clean)
+    speaker.stopSpeaking(at: .immediate)
+    let utterance = AVSpeechUtterance(string: clean)
+    utterance.rate = 0.5
+    speaker.speak(utterance)
+  }
+
+  private func startRecognition() {
+    guard active, !waiting, !speaker.isSpeaking else { return }
+    generation += 1
+    let currentGeneration = generation
+    stopRecognition()
+    transcript = ""
+
+    let node = engine.inputNode
+    let format = node.outputFormat(forBus: 0)
+    guard format.sampleRate > 0, format.channelCount > 0 else {
+      onState?("error", "The microphone is not available.")
+      return
+    }
+    let nextRequest = SFSpeechAudioBufferRecognitionRequest()
+    nextRequest.shouldReportPartialResults = true
+    nextRequest.taskHint = .dictation
+    nextRequest.contextualStrings = ["goodbye Pi", "end conversation", "stop conversation"]
+    request = nextRequest
+    node.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
+      nextRequest.append(buffer)
+    }
+    tapInstalled = true
+    engine.prepare()
+    do {
+      try engine.start()
+    } catch {
+      stopRecognition()
+      onState?("error", "Could not start the microphone: \(error.localizedDescription)")
+      return
+    }
+    onState?("listening", "")
+    task = recognizer?.recognitionTask(with: nextRequest) { [weak self] result, error in
+      DispatchQueue.main.async {
+        guard let self, self.active, currentGeneration == self.generation else { return }
+        if let result { self.receiveTranscription(result.bestTranscription.formattedString, final: result.isFinal) }
+        if let error, !self.waiting {
+          self.stopRecognition()
+          self.onState?("error", "Speech Recognition stopped: \(error.localizedDescription)")
+        }
+      }
+    }
+  }
+
+  private func receiveTranscription(_ value: String, final: Bool) {
+    guard active, !waiting else { return }
+    let clean = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !clean.isEmpty else { return }
+    let normalized = clean.lowercased()
+      .replacingOccurrences(of: "[^a-z0-9]+", with: " ", options: .regularExpression)
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    if normalized.contains("goodbye pi") || normalized.contains("good bye pi")
+      || normalized.contains("end conversation") || normalized.contains("stop conversation")
+    {
+      end()
+      return
+    }
+    transcript = clean
+    onState?("listening", clean)
+    scheduleSend(after: final ? 0.3 : 1.5)
+  }
+
+  private func scheduleSend(after delay: TimeInterval) {
+    silenceWork?.cancel()
+    let expected = transcript
+    let work = DispatchWorkItem { [weak self] in
+      guard let self, self.active, !self.waiting, self.transcript == expected else { return }
+      let clean = expected.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !clean.isEmpty else { return }
+      self.waiting = true
+      self.transcript = ""
+      self.generation += 1
+      self.stopRecognition()
+      self.onState?("thinking", "")
+      self.onPrompt?(clean)
+    }
+    silenceWork = work
+    DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+  }
+
+  private func stopRecognition() {
+    if engine.isRunning { engine.stop() }
+    if tapInstalled {
+      engine.inputNode.removeTap(onBus: 0)
+      tapInstalled = false
+    }
+    request?.endAudio()
+    request = nil
+    task?.cancel()
+    task = nil
+  }
+
+  func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+    guard active else { return }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+      self?.startRecognition()
+    }
+  }
+}
+
 final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDelegate {
   let rpc = RPC()
   var web: WKWebView!
@@ -137,10 +316,10 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
   var selectedProvider = UserDefaults.standard.string(forKey: "PiSpaceProvider")
   var selectedModel = UserDefaults.standard.string(forKey: "PiSpaceModel")
   var pendingModel: (provider: String, model: String)?
+  let voice = VoiceConversation()
   var pendingVoiceActions = [[String: String]]()
   let voiceNotification = Notification.Name("com.olivergreen.pispace.voice")
   let voiceResponseNotification = Notification.Name("com.olivergreen.pispace.voice.response")
-  let voiceStateNotification = Notification.Name("com.olivergreen.pispace.voice.state")
   let modelsURL = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".pi/agent/models.json")
   let managedModels: [[String: Any]] = [
     ["choice": "gpt-5.6-sol", "variant": "GPT-5.6 Sol", "provider": "agentrouter", "providerLabel": "AgentRouter", "id": "gpt-5.6-sol", "name": "gpt-5.6-sol"],
@@ -178,8 +357,11 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     super.viewDidLoad()
     DistributedNotificationCenter.default().addObserver(
       self, selector: #selector(receiveVoiceAction(_:)), name: voiceNotification, object: nil)
-    DistributedNotificationCenter.default().addObserver(
-      self, selector: #selector(receiveVoiceState(_:)), name: voiceStateNotification, object: nil)
+    voice.onState = { [weak self] state, text in self?.js("voiceState", ["state": state, "text": text]) }
+    voice.onPrompt = { [weak self] text in
+      self?.js("voicePrompt", ["text": text, "conversation": true])
+    }
+    voice.onAbort = { [weak self] in self?.rpc.send(["type": "abort"]) }
     rpc.event = { [weak self] in self?.forward($0) }
     rpc.failure = { [weak self] in self?.js("appError", ["message": $0]) }
     guard let path = Bundle.main.path(forResource: "PiSpace", ofType: "html"),
@@ -190,16 +372,6 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     }
     web.loadHTMLString(html, baseURL: Bundle.main.resourceURL)
   }
-  private func sendVoiceControl(_ action: String) {
-    DistributedNotificationCenter.default().postNotificationName(
-      voiceNotification, object: nil, userInfo: ["action": action], deliverImmediately: true)
-  }
-
-  @objc func receiveVoiceState(_ notification: Notification) {
-    guard let info = notification.userInfo as? [String: String] else { return }
-    js("voiceState", info)
-  }
-
   @objc func receiveVoiceAction(_ notification: Notification) {
     guard let info = notification.userInfo as? [String: String], info["action"] != nil else { return }
     if !ready {
@@ -225,6 +397,7 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
   func publishVoiceResponse(_ text: String) {
     let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !clean.isEmpty else { return }
+    voice.receiveResponse(clean)
     DistributedNotificationCenter.default().postNotificationName(
       voiceResponseNotification, object: nil, userInfo: ["text": clean], deliverImmediately: true)
   }
@@ -259,8 +432,8 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
   func userContentController(_ u: WKUserContentController, didReceive m: WKScriptMessage) {
     guard let b = m.body as? [String: Any], let a = b["action"] as? String else { return }
     switch a {
-    case "voiceStart": sendVoiceControl("start_conversation")
-    case "voiceEnd": sendVoiceControl("end_conversation")
+    case "voiceStart": voice.start()
+    case "voiceEnd": voice.end()
     case "prompt":
       if let t = b["text"] as? String {
         let custom = instructions()

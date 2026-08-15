@@ -20,6 +20,10 @@
 	<string>48</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Pi Space uses the microphone during an in-app voice conversation.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Pi Space converts your speech into prompts during an in-app voice conversation.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 </dict>

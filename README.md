@@ -106,7 +106,9 @@ Type `/` in the composer to open autocomplete. Use the arrow keys to move throug
 
 ## Voice commands
 
-The optional Wake Pi listener can be controlled from the menu bar, but the main voice experience is inside Pi Space. Click the microphone button beside the attachment, stop, and send buttons to open the animated voice stage. The stage shows **Listening…**, **Pi is thinking…**, or **Pi is speaking…**, and displays the words currently recognized while you talk.
+The microphone button in Pi Space starts the voice conversation directly. Pi Space requests its own Microphone and Speech Recognition permissions, listens while the voice stage is open, sends each turn after a short pause, and speaks the response. **End conversation** stops recognition and speech immediately, including while Pi is still generating a response.
+
+Wake Pi Listener remains an optional separate menu-bar utility for global wake-word control; it is not required for the in-app voice button.
 
 Install the optional listener with `./scripts/install.sh --with-wake-listener`. After granting Microphone and Speech Recognition access, the listener runs in the macOS menu bar.
 

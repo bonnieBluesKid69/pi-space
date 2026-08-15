@@ -102,7 +102,7 @@ build_pi() {
   local app="$DIST_DIR/$PI_APP_NAME"
   rm -rf "$app"
   mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
-  compile_universal "$ROOT/Sources/PiSpace.swift" "$app/Contents/MacOS/PiSpace" AppKit WebKit
+  compile_universal "$ROOT/Sources/PiSpace.swift" "$app/Contents/MacOS/PiSpace" AppKit AVFoundation Speech WebKit
   cp "$ROOT/Resources/Info.plist" "$app/Contents/Info.plist"
   cp "$ROOT/Resources/PiSpace.html" "$ROOT/Resources/PiSpace.icns" \
     "$ROOT/Resources/THIRD-PARTY-NOTICES.txt" "$app/Contents/Resources/"
