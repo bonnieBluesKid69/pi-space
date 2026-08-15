@@ -19,6 +19,7 @@ for app in "$PI_APP" "$WAKE_APP"; do
 done
 
 [[ -f "$PI_APP/Contents/Resources/PiSpace.html" ]]
+[[ -f "$PI_APP/Contents/Resources/pi-space-bridge.js" ]]
 [[ -f "$PI_APP/Contents/Resources/PiSpace.icns" ]]
 [[ -f "$PI_APP/Contents/Resources/THIRD-PARTY-NOTICES.txt" ]]
 [[ -f "$PI_APP/Contents/Resources/vendor/marked.min.js" ]]

@@ -1073,6 +1073,15 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
   }
   func webView(_ w: WKWebView, didFinish n: WKNavigation!) {
     ready = true
+    js("hostCapabilities", [
+      "bridgeVersion": 1,
+      "platform": "macos",
+      "voice": true,
+      "wakePhrases": true,
+      "kokoro": true,
+      "fileDialogs": true,
+      "secureProviderConfig": true,
+    ])
     queue.forEach(forward)
     queue.removeAll()
     pendingVoiceActions.forEach(handleVoiceAction)
@@ -1697,7 +1706,7 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     guard ready, let data = try? JSONSerialization.data(withJSONObject: x),
       let payload = String(data: data, encoding: .utf8)
     else { return }
-    let script = "window[\(String(reflecting: f))](\(payload));"
+    let script = "window.PiSpaceBridge.receive(\(String(reflecting: f)), \(payload));"
     web.evaluateJavaScript(script)
   }
   deinit {

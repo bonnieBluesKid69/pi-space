@@ -26,6 +26,10 @@ parser.feed(path.read_text(encoding="utf-8"))
 parser.close()
 PY
 
+command -v node >/dev/null || { echo "Node.js is required for bridge contract checks." >&2; exit 1; }
+node --check "$ROOT/Resources/pi-space-bridge.js"
+node "$ROOT/scripts/test-bridge.js"
+
 PATTERN='(BEGIN [A-Z ]*PRIVATE KEY|github_pat_|ghp_[A-Za-z0-9]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9]{32,}|AKIA[0-9A-Z]{16}|xox[baprs]-)'
 SCAN_PATHS=(
   "$ROOT/Sources" "$ROOT/Resources" "$ROOT/scripts" "$ROOT/docs"
