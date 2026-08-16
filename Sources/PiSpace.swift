@@ -1019,7 +1019,15 @@ final class MacUpdateService {
           throw NSError(domain: "PiSpaceUpdate", code: 3, userInfo: [NSLocalizedDescriptionKey: "Pi Space \(version) does not include the required macOS DMG and checksum."])
         }
         self.available = (version, dmg, checksum)
-        self.emit("available", ["manual": manual, "version": version])
+        if self.canReplaceInstallation() {
+          self.emit("available", ["manual": manual, "version": version])
+        } else {
+          self.emit("manual", [
+            "manual": manual,
+            "version": version,
+            "message": self.manualInstallMessage(),
+          ])
+        }
       } catch { self.emit("error", ["manual": manual, "message": "Could not check for updates: \(error.localizedDescription)"]) }
     }.resume()
   }
@@ -1027,6 +1035,10 @@ final class MacUpdateService {
   func install() {
     guard let release = available else {
       emit("error", ["manual": true, "message": "Check for updates before installing."])
+      return
+    }
+    guard canReplaceInstallation() else {
+      emit("manual", ["manual": true, "version": release.version, "message": manualInstallMessage()])
       return
     }
     emit("downloading", ["version": release.version])
@@ -1062,7 +1074,7 @@ final class MacUpdateService {
         }
         self.emit("installing", ["version": release.version])
         try self.stageAndLaunchInstaller(dmgData: dmgData, version: release.version)
-      } catch { self.emit("error", ["manual": true, "message": "Update failed: \(error.localizedDescription)"]) }
+      } catch { self.emit("error", ["manual": true, "phase": "install", "message": "Update failed: \(error.localizedDescription)"]) }
     }
   }
 
@@ -1105,9 +1117,8 @@ final class MacUpdateService {
       throw NSError(domain: "PiSpaceUpdate", code: 14, userInfo: [NSLocalizedDescriptionKey: "The update application could not be staged."])
     }
     let target = Bundle.main.bundleURL.standardizedFileURL
-    let parent = target.deletingLastPathComponent()
-    guard fm.isWritableFile(atPath: parent.path), target.path.hasSuffix(".app") else {
-      throw NSError(domain: "PiSpaceUpdate", code: 15, userInfo: [NSLocalizedDescriptionKey: "Pi Space cannot replace this installation. Install the DMG manually, or use ~/Applications for in-app updates."])
+    guard canReplaceInstallation(), target.path.hasSuffix(".app") else {
+      throw NSError(domain: "PiSpaceUpdate", code: 15, userInfo: [NSLocalizedDescriptionKey: manualInstallMessage()])
     }
     let log = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Logs/Pi Space/update.log")
     try fm.createDirectory(at: log.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -1143,6 +1154,38 @@ final class MacUpdateService {
     process.standardError = FileHandle.nullDevice
     try process.run()
     DispatchQueue.main.async { NSApp.terminate(nil) }
+  }
+
+  func openAvailableDMG() {
+    guard let url = available?.dmg else {
+      emit("error", ["manual": true, "message": "Check for updates before downloading the DMG."])
+      return
+    }
+    DispatchQueue.main.async { NSWorkspace.shared.open(url) }
+  }
+
+  private func canReplaceInstallation() -> Bool {
+    let fm = FileManager.default
+    let target = Bundle.main.bundleURL.standardizedFileURL
+    guard target.path.hasSuffix(".app") else { return false }
+    let parent = target.deletingLastPathComponent()
+    let probe = parent.appendingPathComponent(".pi-space-update-write-test-\(UUID().uuidString)")
+    do {
+      try Data().write(to: probe, options: .atomic)
+      try fm.removeItem(at: probe)
+      return true
+    } catch {
+      try? fm.removeItem(at: probe)
+      return false
+    }
+  }
+
+  private func manualInstallMessage() -> String {
+    let path = Bundle.main.bundleURL.standardizedFileURL.path
+    if path.hasPrefix("/Volumes/") {
+      return "Pi Space is running from a read-only DMG. Download the update, quit Pi Space, then drag it to Applications."
+    }
+    return "Pi Space cannot replace itself in \(path). Download the DMG and replace it manually, or move Pi Space to ~/Applications for future in-app updates."
   }
 
   private func hashesMatch(_ left: String, _ right: String) -> Bool {
@@ -1366,6 +1409,7 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
       if FileManager.default.fileExists(atPath: log.path) { NSWorkspace.shared.open(log) }
     case "checkForUpdates": updater.check(manual: true)
     case "installUpdate": updater.install()
+    case "openUpdateDMG": updater.openAvailableDMG()
     case "openVoiceSettings":
       if let url = URL(string: "x-apple.systempreferences:com.apple.preference.universalaccess?Spoken_Content") {
         NSWorkspace.shared.open(url)

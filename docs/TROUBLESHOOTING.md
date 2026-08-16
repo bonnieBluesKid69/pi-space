@@ -85,7 +85,7 @@ Then click **Retry Kokoro installation** and review the end of the log for packa
 
 ## An in-app macOS update cannot be installed
 
-The in-app updater can replace Pi Space only when its containing folder is writable. A copy in system `/Applications` may require administrator permission. Download `Pi-Space-macOS.dmg` from the latest GitHub Release and drag Pi Space to Applications manually, or install the app under `~/Applications` for future in-app updates.
+The in-app updater can replace Pi Space only when its containing folder is writable. A copy in system `/Applications` may require administrator permission, and an app launched directly from a mounted DMG is read-only. Pi Space now detects either condition before downloading the update, labels it **Manual installation required**, and provides **Download DMG** instead of reporting an update-check failure. Quit Pi Space after downloading, open the DMG, and drag Pi Space to Applications to replace the old copy. Install the app under `~/Applications` to enable verified in-app replacement for future updates.
 
 Pi Space rejects an update if the DMG checksum, bundle identifier, required executable, or bundle signature validation fails. Details from replacement failures are written to `~/Library/Logs/Pi Space/update.log`.
 
