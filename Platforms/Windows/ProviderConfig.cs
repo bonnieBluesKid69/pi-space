@@ -7,14 +7,14 @@ namespace PiSpace.Windows;
 
 internal sealed class ProviderConfig
 {
-    private static readonly string ConfigPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".pi", "agent", "models.json");
+    private static readonly string DefaultConfigPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".pi", "agent", "models.json");
     private readonly JsonObject root;
 
     private ProviderConfig(JsonObject root) => this.root = root;
 
-    public static ProviderConfig Load()
+    public static ProviderConfig Load(string? configPath = null)
     {
-        try { return new ProviderConfig(JsonNode.Parse(File.ReadAllText(ConfigPath))?.AsObject() ?? new JsonObject()); }
+        try { return new ProviderConfig(JsonNode.Parse(File.ReadAllText(configPath ?? DefaultConfigPath))?.AsObject() ?? new JsonObject()); }
         catch { return new ProviderConfig(new JsonObject()); }
     }
 
@@ -23,34 +23,41 @@ internal sealed class ProviderConfig
 
     private JsonObject? Provider(string name) => root["providers"]?[name] as JsonObject;
 
-    public static void Save(string agentRouterKey, string tokenRouterKey, string tabiTokenKey, string tabiTokenBaseUrl)
+    public static void Save(string agentRouterKey, string tokenRouterKey, string tabiTokenKey, string tabiTokenBaseUrl, string? configPath = null, bool restrictAccess = true)
     {
+        configPath ??= DefaultConfigPath;
+        agentRouterKey = agentRouterKey.Trim();
+        tokenRouterKey = tokenRouterKey.Trim();
+        tabiTokenKey = tabiTokenKey.Trim();
+        tabiTokenBaseUrl = tabiTokenBaseUrl.Trim();
+
         if (agentRouterKey.Length > 0 && !agentRouterKey.StartsWith("sk-")) throw new InvalidOperationException("AgentRouter keys must begin with sk-.");
         if (tokenRouterKey.Length > 0 && !tokenRouterKey.StartsWith("sk-") && !tokenRouterKey.StartsWith("tr_")) throw new InvalidOperationException("TokenRouter keys must begin with sk- or tr_.");
 
-        var current = Load();
+        var current = Load(configPath);
         var providers = current.root["providers"] as JsonObject ?? new JsonObject();
         current.root["providers"] = providers;
         providers["agentrouter"] = ManagedProvider(providers["agentrouter"] as JsonObject, "agentrouter", agentRouterKey, null);
         providers["tokenrouter"] = ManagedProvider(providers["tokenrouter"] as JsonObject, "tokenrouter", tokenRouterKey, null);
 
         var existingTabi = providers["tabitoken"] as JsonObject;
-        var effectiveTabiKey = tabiTokenKey.Length > 0 ? tabiTokenKey : existingTabi?["apiKey"]?.GetValue<string>() ?? "";
-        var effectiveTabiUrl = tabiTokenBaseUrl.Length > 0 ? tabiTokenBaseUrl : existingTabi?["baseUrl"]?.GetValue<string>() ?? "";
-        if (effectiveTabiKey.Length > 0 || effectiveTabiUrl.Length > 0)
+        var existingTabiKey = existingTabi?["apiKey"]?.GetValue<string>()?.Trim() ?? "";
+        var effectiveTabiKey = tabiTokenKey.Length > 0 ? tabiTokenKey : existingTabiKey;
+        if (effectiveTabiKey.Length > 0)
         {
-            if (effectiveTabiKey.Length == 0) throw new InvalidOperationException("Enter the TabiToken API key.");
-            if (!Uri.TryCreate(effectiveTabiUrl, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps) throw new InvalidOperationException("Enter the HTTPS Base URL shown in your TabiToken dashboard.");
-            providers["tabitoken"] = ManagedProvider(existingTabi, "tabitoken", tabiTokenKey, effectiveTabiUrl.TrimEnd('/'));
+            var savedTabiUrl = existingTabi?["baseUrl"]?.GetValue<string>()?.Trim() ?? "";
+            var effectiveTabiUrl = (tabiTokenBaseUrl.Length > 0 ? tabiTokenBaseUrl : savedTabiUrl).TrimEnd('/');
+            if (!Uri.TryCreate(effectiveTabiUrl, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps || string.IsNullOrWhiteSpace(uri.Host)) throw new InvalidOperationException("Enter the HTTPS Base URL shown in your TabiToken dashboard.");
+            providers["tabitoken"] = ManagedProvider(existingTabi, "tabitoken", tabiTokenKey, effectiveTabiUrl);
         }
 
-        Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
-        var backup = ConfigPath + ".backup";
-        if (File.Exists(ConfigPath)) File.Copy(ConfigPath, backup, true);
-        var temporary = ConfigPath + ".tmp";
+        Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
+        var backup = configPath + ".backup";
+        if (File.Exists(configPath)) File.Copy(configPath, backup, true);
+        var temporary = configPath + ".tmp";
         File.WriteAllText(temporary, current.root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
-        File.Move(temporary, ConfigPath, true);
-        RestrictToCurrentUser(ConfigPath);
+        File.Move(temporary, configPath, true);
+        if (restrictAccess) RestrictToCurrentUser(configPath);
     }
 
     private static JsonObject ManagedProvider(JsonObject? existing, string name, string key, string? baseUrl)
@@ -64,8 +71,22 @@ internal sealed class ProviderConfig
         };
         provider["api"] = name == "tabitoken" ? "anthropic-messages" : "openai-completions";
         if (name != "tabitoken") provider["authHeader"] = true;
-        else { provider.Remove("authHeader"); provider.Remove("compat"); }
+        else { provider.Remove("authHeader"); provider.Remove("compat"); provider.Remove("headers"); }
         if (key.Length > 0) provider["apiKey"] = key;
+        if (name == "agentrouter")
+        {
+            provider["headers"] = new JsonObject
+            {
+                ["Originator"] = "codex_cli_rs",
+                ["User-Agent"] = "codex_cli_rs/0.101.0 (Pi Space; Windows)",
+                ["Version"] = "0.101.0",
+            };
+            provider["compat"] = new JsonObject
+            {
+                ["supportsDeveloperRole"] = false,
+                ["supportsReasoningEffort"] = false,
+            };
+        }
         provider["models"] = Models(name);
         return provider;
     }

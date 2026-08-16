@@ -37,6 +37,8 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
+      - name: Test Windows provider configuration
+        run: dotnet run --project Platforms/Windows/Tests/PiSpace.Windows.Tests.csproj --configuration Release
       - name: Build Windows shell
         run: dotnet build Platforms/Windows/PiSpace.Windows.csproj --configuration Release
       - name: Publish Windows shell
