@@ -188,8 +188,14 @@ final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate, AVAudioPla
   }
 
   var kokoroInstalled: Bool {
-    FileManager.default.fileExists(atPath: kokoroRoot.appendingPathComponent("status").path)
-      && FileManager.default.fileExists(atPath: kokoroRoot.appendingPathComponent("python-path").path)
+    let pythonPathURL = kokoroRoot.appendingPathComponent("python-path")
+    guard FileManager.default.fileExists(atPath: kokoroRoot.appendingPathComponent("status").path),
+      FileManager.default.fileExists(atPath: kokoroRoot.appendingPathComponent("tts-server.py").path),
+      let pythonPath = try? String(contentsOf: pythonPathURL, encoding: .utf8)
+        .trimmingCharacters(in: .whitespacesAndNewlines),
+      !pythonPath.isEmpty
+    else { return false }
+    return FileManager.default.isExecutableFile(atPath: pythonPath)
   }
   var kokoroVoice = UserDefaults.standard.string(forKey: "PiSpaceKokoroVoice") ?? "af_heart"
 
@@ -1185,6 +1191,13 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
   var pendingModel: (provider: String, model: String)?
   let voice = VoiceConversation()
   let updater = MacUpdateService()
+  let kokoroSupported: Bool = {
+    #if arch(arm64)
+      return true
+    #else
+      return false
+    #endif
+  }()
   var pendingVoiceActions = [[String: String]]()
   let voiceNotification = Notification.Name("com.olivergreen.pispace.voice")
   let voiceResponseNotification = Notification.Name("com.olivergreen.pispace.voice.response")
@@ -1308,7 +1321,7 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
       "platform": "macos",
       "voice": true,
       "wakePhrases": true,
-      "kokoro": true,
+      "kokoro": kokoroSupported,
       "fileDialogs": true,
       "secureProviderConfig": true,
       "updates": true,
@@ -1348,6 +1361,9 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     case "setKokoroVoice":
       if let identifier = b["identifier"] as? String { voice.setKokoroVoice(identifier) }
     case "installKokoro": voice.installKokoro()
+    case "openKokoroLog":
+      let log = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Logs/Pi Space/kokoro-install.log")
+      if FileManager.default.fileExists(atPath: log.path) { NSWorkspace.shared.open(log) }
     case "checkForUpdates": updater.check(manual: true)
     case "installUpdate": updater.install()
     case "openVoiceSettings":

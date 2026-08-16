@@ -69,13 +69,19 @@ Use the menu-bar icon to confirm that listening is not paused. The recognizer cu
 
 ## Kokoro installation ends with an error
 
-Kokoro requires an Apple silicon Mac, Python 3.10 or newer, free disk space, and internet access for the initial dependencies and model download. Pi Space now shows the final installer error in **Settings → Voice** and writes the complete output to:
+Kokoro requires an Apple silicon Mac, Python 3.10, 3.11, or 3.12, free disk space, and internet access for the initial dependencies and model download. Python 3.9 is not supported. Pi Space shows the final installer step in **Settings → Voice**, keeps the failure visible there, and provides **Open install log**. The complete output is also written to:
 
 ```text
 ~/Library/Logs/Pi Space/kokoro-install.log
 ```
 
-A retry builds a separate environment and does not replace a working Kokoro installation until dependency imports succeed. Review the end of the log for Python version, package download, disk-space, certificate, or network errors, then click **Retry Kokoro installation**.
+The installer searches Homebrew and python.org locations even when Pi Space was launched from Finder. A retry builds a separate environment and does not replace a working Kokoro installation until dependency imports succeed. To install a compatible interpreter manually, use Python 3.12 from python.org or:
+
+```bash
+brew install python@3.12
+```
+
+Then click **Retry Kokoro installation** and review the end of the log for package download, disk-space, certificate, or network errors.
 
 ## An in-app macOS update cannot be installed
 
