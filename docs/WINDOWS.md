@@ -113,15 +113,18 @@ Provider keys written through the Windows Settings view are stored in Pi's `mode
 
 ## Updating
 
-For a source checkout:
+The Windows app checks the latest **versioned GitHub Release** after startup. It does not install from `main`, pull arbitrary source changes, or trust CI preview artifacts. If a release contains both `Pi-Space-Windows-x64.zip` and its matching `.sha256` file, Pi Space shows an in-app notice with **Update now**. You can also open **Settings → Updates → Check for updates**.
+
+Before replacing files, the updater downloads the release ZIP, verifies its SHA-256 checksum, checks the package contents, launches a temporary PowerShell installer, and restarts Pi Space. If replacement fails, the existing executable is started again and the error is written to `%LOCALAPPDATA%\Pi Space\update.log`.
+
+Releases are created by tagging a commit whose Windows project version matches the tag, for example:
 
 ```powershell
-git pull --ff-only
-dotnet build Platforms/Windows/PiSpace.Windows.csproj --configuration Release
-dotnet run --project Platforms/Windows/PiSpace.Windows.csproj
+git tag v0.3.0
+git push origin v0.3.0
 ```
 
-Downloaded CI artifacts are immutable snapshots. Download a newer successful workflow artifact rather than replacing files inside an existing published directory manually.
+The `Windows Release` workflow publishes the ZIP and checksum to the GitHub Release. Release signing is still separate work; unsigned Windows releases may trigger SmartScreen warnings.
 
 ## Troubleshooting
 

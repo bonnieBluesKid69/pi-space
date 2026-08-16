@@ -28,7 +28,9 @@ The bridge adds `bridgeVersion: 1` and sends the flat message object to the acti
 
 Native hosts send UI events through `PiSpaceBridge.receive(event, payload)`. WebView2 may instead post `{ event, payload }` to its browser message event. Event names continue to map to the existing UI handlers such as `rpcEvent`, `sessionsLoaded`, `providerSettingsLoaded`, and `voiceState`.
 
-Every host should send `hostCapabilities` after navigation finishes. The payload includes `platform`, `bridgeVersion`, `voice`, `wakePhrases`, `kokoro`, `fileDialogs`, and `secureProviderConfig`. Unsupported features must be reported as `false` so the shared UI can disable their controls. Platform adapters own process spawning, secure configuration, native dialogs, audio, notifications, and packaging; Pi RPC behavior and UI state remain shared.
+Every host should send `hostCapabilities` after navigation finishes. The payload includes `platform`, `bridgeVersion`, `voice`, `wakePhrases`, `kokoro`, `fileDialogs`, `secureProviderConfig`, and `updates`. Unsupported features must be reported as `false` so the shared UI can disable their controls. Platform adapters own process spawning, secure configuration, native dialogs, audio, notifications, update channels, and packaging; Pi RPC behavior and UI state remain shared.
+
+The Windows adapter emits `updateState` events with `checking`, `current`, `available`, `downloading`, `installing`, and `error` states. Its updater accepts only assets from the official repository's latest GitHub Release and verifies the matching SHA-256 asset before installation. See [WINDOWS.md](WINDOWS.md) for the release workflow and user-facing update behavior.
 
 Run `node scripts/test-bridge.js` to validate macOS, WebView2, Linux-hook, inbound-event, and missing-host behavior.
 

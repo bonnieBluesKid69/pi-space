@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
@@ -18,6 +19,7 @@ internal sealed class MainForm : Form
 {
     private readonly WebView2 web = new() { Dock = DockStyle.Fill };
     private readonly PiRpcClient rpc = new();
+    private readonly UpdateService updater = new(Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0");
     private readonly JsonSerializerOptions json = new(JsonSerializerDefaults.Web);
     private readonly List<string> sessions = [];
     private string workspace = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -46,6 +48,7 @@ internal sealed class MainForm : Form
         Controls.Add(web);
         rpc.EventReceived += ForwardRpc;
         rpc.Failed += message => Ui(() => Emit("appError", new { message }));
+        updater.StateChanged += state => Ui(() => Emit("updateState", state));
         Load += async (_, _) => await InitializeAsync();
         FormClosed += (_, _) => rpc.Dispose();
     }
@@ -74,12 +77,13 @@ internal sealed class MainForm : Form
     {
         if (!e.IsSuccess) return;
         ready = true;
-        Emit("hostCapabilities", new { bridgeVersion = 1, platform = "windows", voice = false, wakePhrases = false, kokoro = false, fileDialogs = true, secureProviderConfig = true });
+        Emit("hostCapabilities", new { bridgeVersion = 1, platform = "windows", voice = false, wakePhrases = false, kokoro = false, fileDialogs = true, secureProviderConfig = true, updates = true, appVersion = updater.CurrentVersion });
         Emit("workspaceChosen", new { path = workspace });
         Emit("instructionsLoaded", new { text = ReadInstructions() });
         ChooseInitialModel();
         SyncProviderSettings();
         StartRpc(false);
+        _ = updater.CheckAsync();
     }
 
     private void StartRpc(bool continuing)
@@ -124,6 +128,8 @@ internal sealed class MainForm : Form
             case "saveInstructions": SaveInstructions(String(body, "text")); break;
             case "saveProviderKeys": SaveProviderKeys(body); break;
             case "updateProviderKey": UpdateProviderKey(String(body, "provider"), String(body, "key")); break;
+            case "checkForUpdates": _ = updater.CheckAsync(true); break;
+            case "installUpdate": _ = updater.InstallAsync(); break;
             case "rpcCommand": SendRpcCommand(body); break;
             case "rpcToggle": rpc.Send(new { type = String(body, "command"), enabled = Bool(body, "enabled") }); break;
             case "extensionUIResponse": SendExtensionUiResponse(body); break;

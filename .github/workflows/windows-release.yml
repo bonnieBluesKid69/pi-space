@@ -1,0 +1,43 @@
+name: Windows Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Validate tag and project version
+        shell: pwsh
+        run: |
+          [xml]$project = Get-Content "Platforms/Windows/PiSpace.Windows.csproj"
+          $version = $project.Project.PropertyGroup.Version | Select-Object -First 1
+          $tag = "${{ github.ref_name }}".TrimStart('v')
+          if ($version -ne $tag) { throw "Tag v$tag does not match Windows project version $version" }
+      - name: Test Windows contracts
+        run: dotnet run --project Platforms/Windows/Tests/PiSpace.Windows.Tests.csproj --configuration Release
+      - name: Publish Windows x64
+        run: dotnet publish Platforms/Windows/PiSpace.Windows.csproj --configuration Release --runtime win-x64 --self-contained false --output dist/windows
+      - name: Package and checksum
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "dist/windows/*" -DestinationPath "dist/Pi-Space-Windows-x64.zip" -CompressionLevel Optimal
+          $hash = (Get-FileHash "dist/Pi-Space-Windows-x64.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  Pi-Space-Windows-x64.zip" | Set-Content -NoNewline "dist/Pi-Space-Windows-x64.sha256"
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/Pi-Space-Windows-x64.zip
+            dist/Pi-Space-Windows-x64.sha256
