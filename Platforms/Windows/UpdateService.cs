@@ -146,7 +146,8 @@ internal sealed class UpdateService
             CreateNoWindow = true,
         };
         foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", scriptPath, "-HostProcessId", processId.ToString(), "-Source", stagePath, "-Destination", Path.GetFullPath(destination) }) start.ArgumentList.Add(argument);
-        Process.Start(start) ?? throw new InvalidOperationException("The update installer could not be started.");
+        var installer = Process.Start(start);
+        if (installer is null) throw new InvalidOperationException("The update installer could not be started.");
     }
 
     private static Uri? AssetUrl(JsonElement release, string name)
