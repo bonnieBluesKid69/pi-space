@@ -8,7 +8,7 @@ usage() {
   cat <<'EOF'
 Usage: ./scripts/package.sh [--no-build]
 
-Creates versioned ZIP archives and SHA-256 checksums in release/.
+Creates a versioned macOS ZIP, DMG, and SHA-256 checksums in release/.
 Set CODESIGN_IDENTITY before running to use a Developer ID signature.
 EOF
 }
@@ -38,9 +38,18 @@ for item in "Pi Space.app|Pi-Space-$VERSION-macOS.zip" "Wake Pi Listener.app|Wak
   COPYFILE_DISABLE=1 ditto -c -k --norsrc --keepParent "$ROOT/dist/$app" "$RELEASE_DIR/$archive"
 done
 
+DMG="$RELEASE_DIR/Pi-Space-macOS.dmg"
+DMG_STAGE="$ROOT/build/dmg-stage"
+rm -rf "$DMG_STAGE" "$DMG"
+mkdir -p "$DMG_STAGE"
+cp -R "$ROOT/dist/Pi Space.app" "$DMG_STAGE/Pi Space.app"
+ln -s /Applications "$DMG_STAGE/Applications"
+hdiutil create -volname "Pi Space $VERSION" -srcfolder "$DMG_STAGE" -ov -format UDZO "$DMG" >/dev/null
+
 (
   cd "$RELEASE_DIR"
-  shasum -a 256 ./*.zip > SHA256SUMS.txt
+  shasum -a 256 ./*.zip Pi-Space-macOS.dmg > SHA256SUMS.txt
+  shasum -a 256 Pi-Space-macOS.dmg > Pi-Space-macOS.sha256
 )
 
 echo "Release archives created in $RELEASE_DIR"

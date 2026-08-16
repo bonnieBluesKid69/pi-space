@@ -30,7 +30,7 @@ Native hosts send UI events through `PiSpaceBridge.receive(event, payload)`. Web
 
 Every host should send `hostCapabilities` after navigation finishes. The payload includes `platform`, `bridgeVersion`, `voice`, `wakePhrases`, `kokoro`, `fileDialogs`, `secureProviderConfig`, and `updates`. Unsupported features must be reported as `false` so the shared UI can disable their controls. Platform adapters own process spawning, secure configuration, native dialogs, audio, notifications, update channels, and packaging; Pi RPC behavior and UI state remain shared.
 
-The Windows adapter emits `updateState` events with `checking`, `current`, `available`, `downloading`, `installing`, and `error` states. Its updater accepts only assets from the official repository's latest GitHub Release and verifies the matching SHA-256 asset before installation. See [WINDOWS.md](WINDOWS.md) for the release workflow and user-facing update behavior.
+Both native adapters emit `updateState` events with `checking`, `current`, `available`, `downloading`, `installing`, and `error` states. Updaters accept only exact assets from the official repository's latest versioned GitHub Release and verify the matching SHA-256 asset before installation. macOS expects `Pi-Space-macOS.dmg` and `Pi-Space-macOS.sha256`; Windows expects `Pi-Space-Windows-x64.zip` and `Pi-Space-Windows-x64.sha256`.
 
 Run `node scripts/test-bridge.js` to validate macOS, WebView2, Linux-hook, inbound-event, and missing-host behavior.
 
@@ -104,7 +104,9 @@ export CODESIGN_IDENTITY='Developer ID Application: Your Name (TEAMID)'
 make package
 ```
 
-A maintainer distributing binary releases should then notarize each ZIP with their Apple Developer credentials and staple the notarization ticket to the app before creating the final archive. Never commit signing certificates, App Store Connect credentials, API keys, or notarization profiles.
+`make package` creates versioned macOS ZIP archives, `Pi-Space-macOS.dmg`, its dedicated updater checksum, and the aggregate `SHA256SUMS.txt`. The DMG contains Pi Space and an Applications shortcut.
+
+A maintainer distributing binary releases should notarize the app before packaging, then staple the ticket before creating the final DMG and ZIP. Never commit signing certificates, App Store Connect credentials, API keys, or notarization profiles.
 
 ## RPC notes
 
@@ -123,14 +125,14 @@ The current UI explicitly cancels RPC extension dialogs. Do not silently ignore 
 
 ## Release checklist
 
-1. Update versions in `Resources/Info.plist`.
+1. Update the same release version in `Resources/Info.plist` and `Platforms/Windows/PiSpace.Windows.csproj`.
 2. Read the upstream Pi changelog and RPC documentation for protocol changes.
 3. Run `make test` on macOS.
 4. Manually test chat, Stop, New Chat, session switching, workspace switching, model selection, and custom instructions.
 5. Test the optional listener and permission prompts.
-6. Run `make package` with the intended signing identity.
+6. Run `make package` with the intended signing identity and verify the DMG.
 7. Notarize public binary builds.
-8. Create a Git tag matching the version and attach the archives plus `SHA256SUMS.txt` to the GitHub release.
+8. Push a `v*` Git tag matching both app versions. The desktop release workflow validates Windows and macOS independently, then publishes both platforms, exact updater checksums, versioned ZIPs, and `SHA256SUMS.txt` in one GitHub Release.
 
 ## Repository hygiene
 

@@ -35,7 +35,17 @@ The macOS app is the current full-featured version. A native Windows WebView2 pr
 
 ## macOS quick start
 
-### 1. Install and configure Pi
+### 1. Download the app
+
+Download `Pi-Space-macOS.dmg` from the latest [GitHub Release](https://github.com/bonnieBluesKid69/pi-space/releases/latest), open it, and drag **Pi Space** to the Applications shortcut. Public builds are currently unsigned and not notarized, so macOS may require Finder's **Open** command from the app's context menu. Never disable Gatekeeper globally.
+
+To verify the download first, place `Pi-Space-macOS.dmg` and `Pi-Space-macOS.sha256` in the same folder and run:
+
+```bash
+shasum -a 256 -c Pi-Space-macOS.sha256
+```
+
+### 2. Install and configure Pi
 
 ```bash
 npm install -g --ignore-scripts @earendil-works/pi-coding-agent
@@ -46,7 +56,7 @@ Inside Pi, run `/login`, choose a provider, and finish authentication. Exit Pi a
 
 Pi Space is normally opened from Finder, so authenticating with `/login` is more reliable than relying on an API-key environment variable from one terminal window.
 
-### 2. Build and install Pi Space
+### 3. Build from source instead
 
 ```bash
 git clone https://github.com/bonnieBluesKid69/pi-space.git
@@ -66,7 +76,11 @@ The listener asks for Microphone and Speech Recognition access when first opened
 
 ## macOS updating
 
-From the existing Pi Space Git checkout, run:
+Pi Space checks the latest versioned GitHub Release after launch. **Settings → Updates** can check manually and install a verified update when the app's containing folder is writable, including the default source installation in `~/Applications`. The updater downloads the exact macOS DMG and matching SHA-256 asset, validates the bundle and signature, preserves the existing app until replacement succeeds, and then restarts Pi Space.
+
+Apps installed to system `/Applications` may require administrator permission to replace. In that case, download the latest DMG and drag the new version to Applications manually.
+
+For source installations, the Git updater remains available:
 
 ```bash
 ./scripts/update.sh
@@ -146,7 +160,7 @@ make check       # Type-check sources and scan for accidentally committed secret
 make build       # Build both universal app bundles into dist/
 make test        # Build, validate signatures/bundles, and smoke-test Pi RPC
 make install     # Install Pi Space to ~/Applications
-make package     # Create ZIP archives and checksums in release/
+make package     # Create the macOS DMG, ZIP archives, and checksums in release/
 ```
 
 For architecture, signing, release, and development details, see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).

@@ -67,6 +67,22 @@ Check **System Settings > Privacy & Security** and enable both:
 
 Use the menu-bar icon to confirm that listening is not paused. The recognizer currently uses the `en-AU` locale.
 
+## Kokoro installation ends with an error
+
+Kokoro requires an Apple silicon Mac, Python 3.10 or newer, free disk space, and internet access for the initial dependencies and model download. Pi Space now shows the final installer error in **Settings → Voice** and writes the complete output to:
+
+```text
+~/Library/Logs/Pi Space/kokoro-install.log
+```
+
+A retry builds a separate environment and does not replace a working Kokoro installation until dependency imports succeed. Review the end of the log for Python version, package download, disk-space, certificate, or network errors, then click **Retry Kokoro installation**.
+
+## An in-app macOS update cannot be installed
+
+The in-app updater can replace Pi Space only when its containing folder is writable. A copy in system `/Applications` may require administrator permission. Download `Pi-Space-macOS.dmg` from the latest GitHub Release and drag Pi Space to Applications manually, or install the app under `~/Applications` for future in-app updates.
+
+Pi Space rejects an update if the DMG checksum, bundle identifier, required executable, or bundle signature validation fails. Details from replacement failures are written to `~/Library/Logs/Pi Space/update.log`.
+
 ## A session will not open
 
 Pi Space lists `.jsonl` files under `~/.pi/agent/sessions/`. If a file was moved, corrupted, or created by an incompatible Pi version, it may not switch successfully.

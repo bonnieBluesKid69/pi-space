@@ -1,5 +1,6 @@
 import AVFoundation
 import AppKit
+import CryptoKit
 import Darwin
 import Foundation
 import Speech
@@ -136,6 +137,7 @@ final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate, AVAudioPla
   var onAbort: (() -> Void)?
   var onWake: (() -> Void)?
   var onSettingsChanged: (() -> Void)?
+  var onInstallState: ((String, String) -> Void)?
 
   private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-AU"))
   private let engine = AVAudioEngine()
@@ -273,23 +275,44 @@ final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate, AVAudioPla
   func installKokoro() {
     guard kokoroProcess == nil else { return }
     guard let script = Bundle.main.path(forResource: "install-kokoro", ofType: "sh") else {
-      onState?("error", "The Kokoro installer is missing from this build.")
+      onInstallState?("error", "The Kokoro installer is missing from this build.")
       return
     }
-    onState?("starting", "Installing Kokoro. The free local model is about 350 MB…")
+    onInstallState?("installing", "Installing the local model and voice dependencies. This can take several minutes.")
     let process = Process()
+    let output = Pipe()
+    var captured = Data()
+    let captureQueue = DispatchQueue(label: "com.pispace.kokoro-installer-output")
     process.executableURL = URL(fileURLWithPath: "/bin/bash")
     process.arguments = [script]
-    process.standardOutput = FileHandle.nullDevice
-    process.standardError = FileHandle.nullDevice
+    process.standardOutput = output
+    process.standardError = output
+    output.fileHandleForReading.readabilityHandler = { handle in
+      let data = handle.availableData
+      if !data.isEmpty { captureQueue.sync { captured.append(data) } }
+    }
     process.terminationHandler = { [weak self] process in
+      output.fileHandleForReading.readabilityHandler = nil
+      let tailData = output.fileHandleForReading.readDataToEndOfFile()
+      let result = captureQueue.sync { () -> Data in
+        captured.append(tailData)
+        return captured
+      }
+      let text = String(data: result, encoding: .utf8) ?? ""
+      let logURL = URL(fileURLWithPath: NSHomeDirectory())
+        .appendingPathComponent("Library/Logs/Pi Space/kokoro-install.log")
+      try? FileManager.default.createDirectory(at: logURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+      try? text.write(to: logURL, atomically: true, encoding: .utf8)
       DispatchQueue.main.async {
-        self?.kokoroProcess = nil
-        if process.terminationStatus == 0 {
-          self?.onState?("idle", "Kokoro is ready.")
-          self?.onSettingsChanged?()
+        guard let self else { return }
+        self.kokoroProcess = nil
+        if process.terminationStatus == 0, self.kokoroInstalled {
+          self.onInstallState?("ready", "Kokoro is installed and ready.")
+          self.onSettingsChanged?()
         } else {
-          self?.onState?("error", "Kokoro installation failed. Check your internet connection and try again.")
+          let useful = text.split(separator: "\n").map(String.init)
+            .last { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? "Installation failed."
+          self.onInstallState?("error", "\(useful) Log: ~/Library/Logs/Pi Space/kokoro-install.log")
         }
       }
     }
@@ -297,7 +320,8 @@ final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate, AVAudioPla
       try process.run()
       kokoroProcess = process
     } catch {
-      onState?("error", "Could not start the Kokoro installer: \(error.localizedDescription)")
+      output.fileHandleForReading.readabilityHandler = nil
+      onInstallState?("error", "Could not start the Kokoro installer: \(error.localizedDescription)")
     }
   }
 
@@ -946,6 +970,209 @@ final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate, AVAudioPla
   }
 }
 
+final class MacUpdateService {
+  var stateChanged: (([String: Any]) -> Void)?
+  let currentVersion: String
+  private let owner = "bonnieBluesKid69"
+  private let repository = "pi-space"
+  private let dmgAsset = "Pi-Space-macOS.dmg"
+  private let checksumAsset = "Pi-Space-macOS.sha256"
+  private var available: (version: String, dmg: URL, checksum: URL)?
+
+  init() {
+    currentVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
+  }
+
+  func check(manual: Bool) {
+    emit("checking", ["manual": manual])
+    var request = URLRequest(url: URL(string: "https://api.github.com/repos/\(owner)/\(repository)/releases/latest")!)
+    request.setValue("Pi-Space-macOS/\(currentVersion)", forHTTPHeaderField: "User-Agent")
+    request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+    URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+      guard let self else { return }
+      do {
+        if let error { throw error }
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200, let data else {
+          throw NSError(domain: "PiSpaceUpdate", code: 1, userInfo: [NSLocalizedDescriptionKey: "GitHub did not return a valid release."])
+        }
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let tag = json["tag_name"] as? String,
+          let assets = json["assets"] as? [[String: Any]]
+        else { throw NSError(domain: "PiSpaceUpdate", code: 2, userInfo: [NSLocalizedDescriptionKey: "The release metadata is malformed."]) }
+        let version = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
+        guard Self.compare(version, self.currentVersion) == .orderedDescending else {
+          self.available = nil
+          self.emit("current", ["manual": manual])
+          return
+        }
+        func asset(_ name: String) -> URL? {
+          guard let value = assets.first(where: { $0["name"] as? String == name })?["browser_download_url"] as? String else { return nil }
+          return URL(string: value)
+        }
+        guard let dmg = asset(self.dmgAsset), let checksum = asset(self.checksumAsset) else {
+          throw NSError(domain: "PiSpaceUpdate", code: 3, userInfo: [NSLocalizedDescriptionKey: "Pi Space \(version) does not include the required macOS DMG and checksum."])
+        }
+        self.available = (version, dmg, checksum)
+        self.emit("available", ["manual": manual, "version": version])
+      } catch { self.emit("error", ["manual": manual, "message": "Could not check for updates: \(error.localizedDescription)"]) }
+    }.resume()
+  }
+
+  func install() {
+    guard let release = available else {
+      emit("error", ["manual": true, "message": "Check for updates before installing."])
+      return
+    }
+    emit("downloading", ["version": release.version])
+    let group = DispatchGroup()
+    var dmgData: Data?
+    var checksumData: Data?
+    var failure: Error?
+    for (url, assign) in [(release.dmg, { dmgData = $0 }), (release.checksum, { checksumData = $0 })] {
+      group.enter()
+      var request = URLRequest(url: url)
+      request.setValue("Pi-Space-macOS/\(currentVersion)", forHTTPHeaderField: "User-Agent")
+      URLSession.shared.dataTask(with: request) { data, response, error in
+        defer { group.leave() }
+        if let error { failure = error; return }
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200, let data else {
+          failure = NSError(domain: "PiSpaceUpdate", code: 4, userInfo: [NSLocalizedDescriptionKey: "An update asset could not be downloaded."])
+          return
+        }
+        assign(data)
+      }.resume()
+    }
+    group.notify(queue: .global(qos: .userInitiated)) { [weak self] in
+      guard let self else { return }
+      do {
+        if let failure { throw failure }
+        guard let dmgData, let checksumData, let checksumText = String(data: checksumData, encoding: .utf8) else {
+          throw NSError(domain: "PiSpaceUpdate", code: 5, userInfo: [NSLocalizedDescriptionKey: "The downloaded update is incomplete."])
+        }
+        let expected = try self.parseChecksum(checksumText)
+        let actual = SHA256.hash(data: dmgData).map { String(format: "%02x", $0) }.joined()
+        guard self.hashesMatch(expected, actual) else {
+          throw NSError(domain: "PiSpaceUpdate", code: 6, userInfo: [NSLocalizedDescriptionKey: "The macOS update checksum does not match. Nothing was installed."])
+        }
+        self.emit("installing", ["version": release.version])
+        try self.stageAndLaunchInstaller(dmgData: dmgData, version: release.version)
+      } catch { self.emit("error", ["manual": true, "message": "Update failed: \(error.localizedDescription)"]) }
+    }
+  }
+
+  private func parseChecksum(_ text: String) throws -> String {
+    let fields = text.trimmingCharacters(in: .whitespacesAndNewlines).split(whereSeparator: { $0 == " " || $0 == "\t" })
+    guard let first = fields.first else { throw NSError(domain: "PiSpaceUpdate", code: 7, userInfo: [NSLocalizedDescriptionKey: "The checksum file is empty."]) }
+    let hash = String(first).lowercased()
+    guard hash.count == 64, hash.allSatisfy({ $0.isHexDigit }) else {
+      throw NSError(domain: "PiSpaceUpdate", code: 8, userInfo: [NSLocalizedDescriptionKey: "The checksum file is invalid."])
+    }
+    if fields.count > 1 {
+      let filename = fields[1].trimmingCharacters(in: CharacterSet(charactersIn: "*"))
+      guard filename == dmgAsset else { throw NSError(domain: "PiSpaceUpdate", code: 9, userInfo: [NSLocalizedDescriptionKey: "The checksum names an unexpected file."]) }
+    }
+    return hash
+  }
+
+  private func stageAndLaunchInstaller(dmgData: Data, version: String) throws {
+    let fm = FileManager.default
+    let root = fm.temporaryDirectory.appendingPathComponent("PiSpaceUpdate-\(UUID().uuidString)")
+    let mount = root.appendingPathComponent("mount")
+    let staged = root.appendingPathComponent("Pi Space.app")
+    try fm.createDirectory(at: mount, withIntermediateDirectories: true)
+    let dmg = root.appendingPathComponent(dmgAsset)
+    try dmgData.write(to: dmg, options: .atomic)
+    let attach = try run("/usr/bin/hdiutil", ["attach", dmg.path, "-mountpoint", mount.path, "-nobrowse", "-readonly"])
+    guard attach == 0 else { throw NSError(domain: "PiSpaceUpdate", code: 10, userInfo: [NSLocalizedDescriptionKey: "The verified DMG could not be mounted."]) }
+    defer { _ = try? run("/usr/bin/hdiutil", ["detach", mount.path, "-force"]) }
+    let source = mount.appendingPathComponent("Pi Space.app")
+    guard fm.fileExists(atPath: source.appendingPathComponent("Contents/MacOS/PiSpace").path) else {
+      throw NSError(domain: "PiSpaceUpdate", code: 11, userInfo: [NSLocalizedDescriptionKey: "The DMG does not contain Pi Space.app."])
+    }
+    guard Bundle(url: source)?.bundleIdentifier == "com.pispace.app" else {
+      throw NSError(domain: "PiSpaceUpdate", code: 12, userInfo: [NSLocalizedDescriptionKey: "The update has an unexpected bundle identifier."])
+    }
+    guard try run("/usr/bin/codesign", ["--verify", "--deep", "--strict", source.path]) == 0 else {
+      throw NSError(domain: "PiSpaceUpdate", code: 13, userInfo: [NSLocalizedDescriptionKey: "The update application failed signature validation."])
+    }
+    guard try run("/usr/bin/ditto", [source.path, staged.path]) == 0 else {
+      throw NSError(domain: "PiSpaceUpdate", code: 14, userInfo: [NSLocalizedDescriptionKey: "The update application could not be staged."])
+    }
+    let target = Bundle.main.bundleURL.standardizedFileURL
+    let parent = target.deletingLastPathComponent()
+    guard fm.isWritableFile(atPath: parent.path), target.path.hasSuffix(".app") else {
+      throw NSError(domain: "PiSpaceUpdate", code: 15, userInfo: [NSLocalizedDescriptionKey: "Pi Space cannot replace this installation. Install the DMG manually, or use ~/Applications for in-app updates."])
+    }
+    let log = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Logs/Pi Space/update.log")
+    try fm.createDirectory(at: log.deletingLastPathComponent(), withIntermediateDirectories: true)
+    let helper = root.appendingPathComponent("install-update.sh")
+    let script = """
+      #!/bin/bash
+      set -u
+      target=\(shellQuote(target.path))
+      staged=\(shellQuote(staged.path))
+      backup="${target}.previous"
+      log=\(shellQuote(log.path))
+      pid=\(ProcessInfo.processInfo.processIdentifier)
+      while kill -0 "$pid" 2>/dev/null; do sleep 0.2; done
+      rm -rf "$backup"
+      if ! mv "$target" "$backup" >>"$log" 2>&1; then exit 1; fi
+      if /usr/bin/ditto "$staged" "$target" >>"$log" 2>&1; then
+        rm -rf "$backup"
+        /usr/bin/open "$target"
+        rm -rf \(shellQuote(root.path))
+      else
+        rm -rf "$target"
+        mv "$backup" "$target"
+        /usr/bin/open "$target"
+        exit 1
+      fi
+      """
+    try script.write(to: helper, atomically: true, encoding: .utf8)
+    try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: helper.path)
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/bin/bash")
+    process.arguments = [helper.path]
+    process.standardOutput = FileHandle.nullDevice
+    process.standardError = FileHandle.nullDevice
+    try process.run()
+    DispatchQueue.main.async { NSApp.terminate(nil) }
+  }
+
+  private func hashesMatch(_ left: String, _ right: String) -> Bool {
+    let a = Array(left.utf8)
+    let b = Array(right.utf8)
+    guard a.count == b.count else { return false }
+    var difference: UInt8 = 0
+    for index in a.indices { difference |= a[index] ^ b[index] }
+    return difference == 0
+  }
+
+  private func run(_ executable: String, _ arguments: [String]) throws -> Int32 {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: executable)
+    process.arguments = arguments
+    process.standardOutput = FileHandle.nullDevice
+    process.standardError = FileHandle.nullDevice
+    try process.run()
+    process.waitUntilExit()
+    return process.terminationStatus
+  }
+
+  private func emit(_ status: String, _ extra: [String: Any] = [:]) {
+    var payload = extra
+    payload["status"] = status
+    payload["currentVersion"] = currentVersion
+    DispatchQueue.main.async { [weak self] in self?.stateChanged?(payload) }
+  }
+
+  private func shellQuote(_ value: String) -> String { "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'" }
+
+  static func compare(_ left: String, _ right: String) -> ComparisonResult {
+    left.compare(right, options: .numeric)
+  }
+}
+
 final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDelegate {
   let rpc = RPC()
   var web: WKWebView!
@@ -957,6 +1184,7 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
   var selectedModel = UserDefaults.standard.string(forKey: "PiSpaceModel")
   var pendingModel: (provider: String, model: String)?
   let voice = VoiceConversation()
+  let updater = MacUpdateService()
   var pendingVoiceActions = [[String: String]]()
   let voiceNotification = Notification.Name("com.olivergreen.pispace.voice")
   let voiceResponseNotification = Notification.Name("com.olivergreen.pispace.voice.response")
@@ -999,6 +1227,8 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     DistributedNotificationCenter.default().addObserver(
       self, selector: #selector(receiveVoiceAction(_:)), name: voiceNotification, object: nil)
     voice.onState = { [weak self] state, text in self?.js("voiceState", ["state": state, "text": text]) }
+    voice.onInstallState = { [weak self] state, text in self?.js("kokoroInstallState", ["state": state, "text": text]) }
+    updater.stateChanged = { [weak self] state in self?.js("updateState", state) }
     voice.onTranscript = { [weak self] text, final in self?.js("voiceTranscript", ["text": text, "final": final]) }
     voice.onPrompt = { [weak self] text, interrupt in
       self?.js("voicePrompt", ["text": text, "conversation": true, "interrupt": interrupt])
@@ -1081,6 +1311,8 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
       "kokoro": true,
       "fileDialogs": true,
       "secureProviderConfig": true,
+      "updates": true,
+      "appVersion": updater.currentVersion,
     ])
     queue.forEach(forward)
     queue.removeAll()
@@ -1094,6 +1326,7 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     voice.startWakeListenerIfEnabled()
     rpc.start(cwd, continuing: false, provider: selectedProvider, model: selectedModel)
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in self?.refresh() }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in self?.updater.check(manual: false) }
   }
   func userContentController(_ u: WKUserContentController, didReceive m: WKScriptMessage) {
     guard let b = m.body as? [String: Any], let a = b["action"] as? String else { return }
@@ -1115,6 +1348,8 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     case "setKokoroVoice":
       if let identifier = b["identifier"] as? String { voice.setKokoroVoice(identifier) }
     case "installKokoro": voice.installKokoro()
+    case "checkForUpdates": updater.check(manual: true)
+    case "installUpdate": updater.install()
     case "openVoiceSettings":
       if let url = URL(string: "x-apple.systempreferences:com.apple.preference.universalaccess?Spoken_Content") {
         NSWorkspace.shared.open(url)
