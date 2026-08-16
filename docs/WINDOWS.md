@@ -42,19 +42,21 @@ Install these before starting Pi Space:
 
 5. **.NET 8 SDK** if building from source. Install it from [dotnet.microsoft.com](https://dotnet.microsoft.com/download/dotnet/8.0).
 
-## Option A: Download the CI preview
+## Option A: Download the Windows release
 
-The repository's Windows workflow publishes a `Pi-Space-Windows-x64` artifact for successful builds.
+The repository's Windows release workflow publishes a versioned `Pi-Space-Windows-x64.zip` and matching checksum file. The short-lived `Pi-Space-Windows-x64` Actions artifact remains available for preview testing but is not an update source.
 
-1. Open the repository's [Actions page](https://github.com/bonnieBluesKid69/pi-space/actions/workflows/checks.yml).
-2. Open a successful run for the commit you want.
-3. Download **Pi-Space-Windows-x64** from the **Artifacts** section.
+1. Open the repository's [Releases page](https://github.com/bonnieBluesKid69/pi-space/releases).
+2. Download the latest **Pi-Space-Windows-x64.zip** and **Pi-Space-Windows-x64.sha256** assets from the release.
+3. Verify the ZIP against the checksum file before extracting it.
 4. Extract the ZIP to a folder you control, such as `%LOCALAPPDATA%\Pi Space`.
 5. Run `PiSpace.exe`.
 
-The artifact is framework-dependent and requires the **.NET 8 Desktop Runtime** as well as WebView2. Install it from the [.NET 8 download page](https://dotnet.microsoft.com/download/dotnet/8.0) if it is not already present. The CI artifact is not code-signed. Verify that the download came from the official repository workflow, inspect the commit and workflow run, and review the source before using it with provider credentials or untrusted projects.
+The first updater-enabled release is `v1.1.0`. Existing CI preview users need to install that release once manually; later releases can be installed from inside the app.
 
-Windows SmartScreen may warn because the executable is not signed. Do not bypass security prompts for an executable from an unverified source. For a trusted repository artifact, use **More info → Run anyway** only after verifying the workflow, commit, and extracted files yourself.
+The release ZIP is framework-dependent and requires the **.NET 8 Desktop Runtime** as well as WebView2. Install it from the [.NET 8 download page](https://dotnet.microsoft.com/download/dotnet/8.0) if it is not already present. Release packages are not code-signed yet. Verify that the download came from the official repository release, inspect the release assets and source, and review the package before using it with provider credentials or untrusted projects.
+
+Windows SmartScreen may warn because the executable is not signed. Do not bypass security prompts for an executable from an unverified source. For a release from the official repository, use **More info → Run anyway** only after verifying the repository, release tag, checksum, and extracted files yourself.
 
 ## Option B: Build from source
 

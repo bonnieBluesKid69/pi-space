@@ -35,9 +35,9 @@ try
     Assert(config.IsConfigured("tabitoken"), "TabiToken key was not saved.");
     Assert(config.BaseUrl("tabitoken") == "https://example.com/v1", "TabiToken Base URL was not normalized.");
 
-    Assert(UpdateService.IsNewer("v0.3.0", "0.2.0"), "A newer release version was not detected.");
-    Assert(!UpdateService.IsNewer("v0.2.0", "0.2.0"), "The installed release was treated as newer.");
-    Assert(!UpdateService.IsNewer("v0.1.9", "0.2.0"), "An older release was treated as newer.");
+    Assert(UpdateService.IsNewer("v1.2.0", "1.1.0"), "A newer release version was not detected.");
+    Assert(!UpdateService.IsNewer("v1.1.0", "1.1.0"), "The installed release was treated as newer.");
+    Assert(!UpdateService.IsNewer("v1.0.9", "1.1.0"), "An older release was treated as newer.");
     var checksum = new string('a', 64);
     Assert(UpdateService.ParseChecksum($"{checksum}  Pi-Space-Windows-x64.zip\n", "Pi-Space-Windows-x64.zip") == checksum, "The release checksum could not be parsed.");
     Assert(UpdateService.ParseChecksum($"{checksum}  another.zip\n", "Pi-Space-Windows-x64.zip") is null, "A checksum for the wrong asset was accepted.");
