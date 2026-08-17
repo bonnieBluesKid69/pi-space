@@ -65,22 +65,11 @@ If the list is empty, authenticate in terminal Pi with `/login`, then restart Pi
 
 The available thinking levels depend on the selected model. Changing the model refreshes the supported levels.
 
-## Optional voice listener
+## Click-to-start voice
 
-Install it with:
+Click the microphone control in Chat to open an in-app voice conversation. Pi Space accesses the microphone only while this panel is active. Use **End conversation** to stop recognition, generation, queued speech, and playback immediately.
 
-```bash
-./scripts/install.sh --with-wake-listener
-```
-
-The **Wake Pi Listener** appears in the macOS menu bar. It recognizes English (Australia) speech and reacts to:
-
-- **wake up Pi**: opens or focuses Pi Space;
-- **time for bed Pi**: closes Pi Space.
-
-The helper looks for Pi Space in `~/Applications`, the Desktop, and `/Applications`, in that order. It requires Microphone and Speech Recognition permission. Use its menu to pause listening, resume, open Pi Space manually, or quit.
-
-To start it automatically after login, add **Wake Pi Listener** under **System Settings > General > Login Items**.
+Install and preview Kokoro under **Settings → Voice**. On Windows, install an English speech-recognition language pack in Windows Settings if Pi Space reports that none is available. The Windows Kokoro installer downloads a private embedded runtime and checksum-verified ONNX model to `%LOCALAPPDATA%\Pi Space\kokoro`; full output is stored at `%LOCALAPPDATA%\Pi Space\kokoro-install.log`.
 
 ## Data locations
 
@@ -90,6 +79,5 @@ To start it automatically after login, add **Wake Pi Listener** under **System S
 | Pi sessions | `~/.pi/agent/sessions/` |
 | Pi Space custom instructions | `~/.pi/agent/pi-space-instructions.txt` |
 | Installed app | `~/Applications/Pi Space.app` |
-| Optional listener | `~/Applications/Wake Pi Listener.app` |
 
 Pi Space does not copy credentials or sessions into the repository or application bundle.

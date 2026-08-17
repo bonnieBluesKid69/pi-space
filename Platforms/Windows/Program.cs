@@ -54,7 +54,12 @@ internal sealed class MainForm : Form
         rpc.Failed += message => Ui(() => Emit("appError", new { message }));
         updater.StateChanged += state => Ui(() => Emit("updateState", state));
         kokoro.InstallStateChanged += (state, text) => Ui(() => { Emit("kokoroInstallState", new { state, text }); SyncProviderSettings(); });
-        voice.StateChanged += (state, text) => Ui(() => Emit("voiceState", new { state, text }));
+        voice.StateChanged += (state, text) => Ui(() =>
+        {
+            Emit("voiceState", new { state, text });
+            if (state == "error" && text.Contains("speech-recognition pack", StringComparison.OrdinalIgnoreCase))
+                Emit("appError", new { message = text + " Open Windows Settings → Time & language → Speech to install one." });
+        });
         voice.TranscriptChanged += (text, final) => Ui(() => Emit("voiceTranscript", new { text, final }));
         voice.PromptReady += (text, interrupt) => Ui(() => Emit("voicePrompt", new { text, conversation = true, interrupt }));
         voice.AbortRequested += () => rpc.Send(new { type = "abort" });

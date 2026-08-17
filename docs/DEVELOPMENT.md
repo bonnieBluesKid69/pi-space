@@ -36,7 +36,7 @@ Run `node scripts/test-bridge.js` to validate macOS, WebView2, Linux-hook, inbou
 
 ## Windows preview
 
-`Platforms/Windows` contains the first native WebView2 shell. It reuses the shared UI and supports Pi RPC chat/tool streaming, sessions, workspaces, attachments, clipboard, model and thinking controls, provider configuration, and persistent instructions. Voice, wake phrases, and Kokoro are intentionally reported as unavailable until Windows audio behavior is implemented and tested on Windows hardware.
+`Platforms/Windows` contains the native WebView2 shell. It reuses the shared UI and supports Pi RPC chat/tool streaming, sessions, workspaces, attachments, clipboard, model and thinking controls, provider configuration, persistent instructions, and click-to-start voice conversation. Windows voice uses the installed Windows English speech-recognition pack for input and a private checksum-pinned Kokoro ONNX runtime for local output. Wake phrases are intentionally unavailable; no microphone recognition occurs until the user opens the in-app voice panel.
 
 Prerequisites are Windows 10 version 1809 or later, the .NET 8 SDK, the WebView2 Runtime, Node.js, and Pi. Build and run it from PowerShell:
 

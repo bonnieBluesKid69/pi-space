@@ -16,10 +16,15 @@ The preview is intended for personal testing of the text-agent workflow. It is n
 - Provider configuration with local file-permission protection
 - Clipboard support
 
-## Current limitations
+## Voice
 
-- No Windows voice conversation yet
-- No wake phrases or Kokoro TTS yet
+Pi Space uses click-to-start in-app voice and does not listen while idle. Click the microphone control in Chat to start, then use **End conversation** to stop recognition, generation, queued speech, and playback.
+
+On Windows, install an English speech-recognition pack in Windows Settings if voice reports that none is available. Under **Settings → Voice**, install Kokoro; the installer uses a private embedded Python runtime, checksum-pinned dependencies/model, and stores data under `%LOCALAPPDATA%\Pi Space\kokoro`. Full installation output is saved at `%LOCALAPPDATA%\Pi Space\kokoro-install.log` and can be opened from the app.
+
+
+- Windows voice conversation requires an English Windows speech-recognition pack and microphone permission
+- Kokoro installation and local ONNX speech output
 - No signed MSI, MSIX, or installer package
 - RPC extension dialogs are cancelled because the shared UI does not render them yet
 - Windows hardware, audio, and installer behavior still need broader testing

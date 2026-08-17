@@ -124,28 +124,17 @@ Commands are handled locally by Pi Space unless marked **Pi RPC**. Slash command
 | `/export` | `[path]` | Exports the current session as HTML. **Pi RPC** |
 | `/auto-compact` | `on` or `off` | Enables or disables automatic context compaction. **Pi RPC** |
 | `/auto-retry` | `on` or `off` | Enables or disables automatic retry. **Pi RPC** |
-| `/voice` | none | Shows the in-app voice controls and wake phrases. |
+| `/voice` | none | Shows the click-to-start in-app voice controls. |
 
 Type `/` in the composer to open autocomplete. Use the arrow keys to move through suggestions, Enter or Tab to select one, and Escape to dismiss the palette.
 
 ## Voice commands
 
-The microphone button in Pi Space starts the voice conversation directly. Pi Space requests its own Microphone and Speech Recognition permissions, shows a live transcript, sends each turn after your selected Fast, Balanced, or Patient pause, and speaks the response. While Pi speaks, macOS voice processing and transcript-overlap filtering let you interrupt with a new request while reducing speaker echo. **Go to sleep Pi** and **End conversation** stop recognition, generation, queued speech, and playback immediately in every voice state.
+The microphone button in Pi Space starts the voice conversation directly on macOS and Windows. Pi Space requests microphone and speech-recognition access, shows a live transcript, sends each turn after your selected Fast, Balanced, or Patient pause, and speaks the response. Recognition runs only while the in-app voice panel is active. **End conversation** stops recognition, generation, queued speech, and playback immediately in every voice state.
 
 The glass voice stage includes microphone mute, pause/resume, repeat-last-answer, and response-timing controls. Settings also provides Concise, Normal, and Detailed spoken-response lengths. These preferences persist across launches.
 
-In **Settings → Voice**, install Kokoro once, choose one of its local neural voices, and preview it. Kokoro is free and open, needs no API key or account, and runs entirely on Apple Silicon after the initial download of roughly 350 MB. Pi Space starts the model only for voice playback and stops it when voice mode ends. The default voice is **Heart — warm**.
-
-The **Wake phrases** toggle enables only these two phrases:
-
-| Phrase | Action |
-| --- | --- |
-| “Wake up Pi” | Brings Pi Space forward and starts an in-app voice conversation. |
-| “Go to sleep Pi” | Ends voice mode and returns to passive wake listening. |
-
-Turning **Wake phrases** off stops passive microphone recognition immediately. Wake phrases work while Pi Space is running, including when its window is closed; they cannot work after Pi Space is fully quit without a separate background helper.
-
-Wake Pi Listener remains an optional separate menu-bar utility for users who explicitly need wake-word behavior after Pi Space quits. It is not required for normal in-app voice or wake phrases while Pi Space is running.
+In **Settings → Voice**, install Kokoro once, choose one of its local neural voices, and preview it. Kokoro is free and open, needs no API key or account, and runs locally after its initial download. macOS uses the MLX model on Apple silicon. Windows x64 installs a private embedded Python runtime and the checksum-pinned Kokoro ONNX int8 model under `%LOCALAPPDATA%\Pi Space\kokoro`; it does not modify system Python. The default voice is **Heart — warm**.
 
 ## Security
 
@@ -175,6 +164,6 @@ This removes the apps but preserves Pi's configuration, credentials, instruction
 
 ## Project status
 
-Pi Space is an independent community client and is not affiliated with or endorsed by the Pi project. macOS is the primary, full-featured platform. The Windows x64 build is a source-available preview for text chat, Pi RPC tools, sessions, workspaces, attachments, and settings; voice features and a signed installer are not available on Windows yet.
+Pi Space is an independent community client and is not affiliated with or endorsed by the Pi project. macOS and Windows x64 share the text-agent workflow and click-to-start local voice conversation. Windows voice requires an installed English Windows speech-recognition pack; microphone behavior and acoustic interruption quality should still be validated on real Windows hardware. Public builds remain unsigned, and Linux support is not available yet.
 
 The current UI does not render RPC extension dialogs. Pi Space cancels those requests and shows an error rather than accepting them silently.

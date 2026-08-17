@@ -10,9 +10,9 @@
     <RootNamespace>PiSpace.Windows</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>PiSpace.ico</ApplicationIcon>
-    <Version>4.9.3</Version>
-    <AssemblyVersion>4.9.3.0</AssemblyVersion>
-    <FileVersion>4.9.3.0</FileVersion>
+    <Version>5.0</Version>
+    <AssemblyVersion>5.0.0.0</AssemblyVersion>
+    <FileVersion>5.0.0.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
