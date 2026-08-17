@@ -20,6 +20,8 @@ internal sealed class MainForm : Form
     private readonly WebView2 web = new() { Dock = DockStyle.Fill };
     private readonly PiRpcClient rpc = new();
     private readonly UpdateService updater = new(Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0");
+    private readonly WindowsKokoroService kokoro = new(Path.Combine(AppContext.BaseDirectory, "Resources", "kokoro-windows-synthesize.py"));
+    private readonly WindowsVoiceConversation voice;
     private readonly JsonSerializerOptions json = new(JsonSerializerDefaults.Web);
     private readonly List<string> sessions = [];
     private string workspace = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -41,6 +43,7 @@ internal sealed class MainForm : Form
 
     public MainForm()
     {
+        voice = new WindowsVoiceConversation(kokoro);
         Text = "Pi Space";
         MinimumSize = new Size(900, 620);
         Size = new Size(1120, 760);
@@ -49,8 +52,14 @@ internal sealed class MainForm : Form
         rpc.EventReceived += ForwardRpc;
         rpc.Failed += message => Ui(() => Emit("appError", new { message }));
         updater.StateChanged += state => Ui(() => Emit("updateState", state));
+        kokoro.InstallStateChanged += (state, text) => Ui(() => { Emit("kokoroInstallState", new { state, text }); SyncProviderSettings(); });
+        voice.StateChanged += (state, text) => Ui(() => Emit("voiceState", new { state, text }));
+        voice.TranscriptChanged += (text, final) => Ui(() => Emit("voiceTranscript", new { text, final }));
+        voice.PromptReady += (text, interrupt) => Ui(() => Emit("voicePrompt", new { text, conversation = true, interrupt }));
+        voice.AbortRequested += () => rpc.Send(new { type = "abort" });
+        voice.SettingsChanged += () => Ui(() => { SyncProviderSettings(); EmitVoiceSettings(); });
         Load += async (_, _) => await InitializeAsync();
-        FormClosed += (_, _) => rpc.Dispose();
+        FormClosed += (_, _) => { voice.Dispose(); kokoro.Dispose(); rpc.Dispose(); };
     }
 
     private async Task InitializeAsync()
@@ -77,7 +86,7 @@ internal sealed class MainForm : Form
     {
         if (!e.IsSuccess) return;
         ready = true;
-        Emit("hostCapabilities", new { bridgeVersion = 1, platform = "windows", voice = false, wakePhrases = false, kokoro = false, fileDialogs = true, secureProviderConfig = true, updates = true, appVersion = updater.CurrentVersion });
+        Emit("hostCapabilities", new { bridgeVersion = 1, platform = "windows", voice = true, wakePhrases = false, kokoro = true, fileDialogs = true, secureProviderConfig = true, updates = true, appVersion = updater.CurrentVersion });
         Emit("workspaceChosen", new { path = workspace });
         Emit("instructionsLoaded", new { text = ReadInstructions() });
         ChooseInitialModel();
@@ -112,8 +121,8 @@ internal sealed class MainForm : Form
         switch (action)
         {
             case "prompt": SendPrompt(body); break;
-            case "abort": rpc.Send(new { type = "abort" }); break;
-            case "newSession": rpc.Send(new { type = "new_session" }); break;
+            case "abort": voice.End(false); rpc.Send(new { type = "abort" }); break;
+            case "newSession": voice.End(false); rpc.Send(new { type = "new_session" }); break;
             case "compact": rpc.Send(new { type = "compact" }); break;
             case "refresh": Refresh(); break;
             case "sessions": LoadSessions(); break;
@@ -133,9 +142,23 @@ internal sealed class MainForm : Form
             case "rpcCommand": SendRpcCommand(body); break;
             case "rpcToggle": rpc.Send(new { type = String(body, "command"), enabled = Bool(body, "enabled") }); break;
             case "extensionUIResponse": SendExtensionUiResponse(body); break;
-            case "voiceStart": case "voiceEnd": case "voiceMute": case "voicePause": case "voiceRepeat": case "setVoicePace": case "setVoiceLength": case "setWakePhrases": case "setVoice": case "setKokoroVoice": case "installKokoro": case "openVoiceSettings": case "previewVoice":
-                Emit("appError", new { message = "Voice is not available in the Windows preview yet." });
+            case "voiceStart": voice.Start(); break;
+            case "voiceEnd": voice.End(); break;
+            case "voiceMute": voice.SetMuted(Bool(body, "muted")); break;
+            case "voicePause": voice.TogglePause(); break;
+            case "voiceRepeat": voice.RepeatLastResponse(); break;
+            case "setVoicePace": voice.SetPace(String(body, "value")); break;
+            case "setVoiceLength": voice.SetResponseLength(String(body, "value")); break;
+            case "setWakePhrases": break;
+            case "setKokoroVoice":
+                try { kokoro.SetVoice(String(body, "identifier")); SyncProviderSettings(); }
+                catch (Exception error) { Emit("appError", new { message = error.Message }); }
                 break;
+            case "installKokoro": _ = kokoro.InstallAsync(); break;
+            case "openKokoroLog": kokoro.OpenLog(); break;
+            case "openVoiceSettings": Process.Start(new ProcessStartInfo("ms-settings:privacy-microphone") { UseShellExecute = true }); break;
+            case "previewVoice": _ = kokoro.PreviewAsync(); break;
+            case "setVoice": break;
         }
     }
 
@@ -175,6 +198,24 @@ internal sealed class MainForm : Form
 
     private void ForwardRpc(JsonElement message)
     {
+        var type = String(message, "type");
+        if (type == "message_update" && message.TryGetProperty("assistantMessageEvent", out var update) && String(update, "type") == "text_delta")
+            voice.ReceiveResponseChunk(String(update, "delta"));
+        if (type == "agent_end")
+        {
+            var fallback = "";
+            if (message.TryGetProperty("messages", out var messages) && messages.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in messages.EnumerateArray().Reverse())
+                {
+                    if (String(item, "role") != "assistant") continue;
+                    fallback = MessageText(item);
+                    break;
+                }
+            }
+            voice.FinishResponse(fallback);
+        }
+
         Ui(() =>
         {
             EmitRaw("rpcEvent", message.GetRawText());
@@ -319,10 +360,11 @@ internal sealed class MainForm : Form
             selectedProvider = selectedProvider ?? "",
             selectedModel = selectedModel ?? "",
             wakePhrasesEnabled = false,
-            voicePace = "balanced",
-            voiceLength = "concise",
-            kokoroInstalled = false,
-            kokoroVoices = Array.Empty<object>(),
+            voicePace = voice.Pace,
+            voiceLength = voice.ResponseLength,
+            kokoroInstalled = kokoro.IsInstalled,
+            kokoroVoice = kokoro.SelectedVoice,
+            kokoroVoices = WindowsKokoroService.Voices.Select(item => new { id = item.Id, name = item.Name }),
             success,
             message,
         });
@@ -347,6 +389,14 @@ internal sealed class MainForm : Form
         try { ProviderConfig.Save(agent, token, tabi, ""); SyncProviderSettings("Provider configuration saved."); StartRpc(true); }
         catch (Exception error) { SyncProviderSettings(error.Message, false); }
     }
+
+    private void EmitVoiceSettings() => Emit("voiceSettings", new
+    {
+        pace = voice.Pace,
+        length = voice.ResponseLength,
+        muted = voice.Muted,
+        paused = voice.Paused,
+    });
 
     private static string InstructionsPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".pi", "agent", "pi-space-instructions.txt");
     private static string ReadInstructions() => File.Exists(InstructionsPath) ? File.ReadAllText(InstructionsPath).Trim() : "";

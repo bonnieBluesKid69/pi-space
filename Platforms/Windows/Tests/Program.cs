@@ -42,7 +42,16 @@ try
     Assert(UpdateService.ParseChecksum($"{checksum}  Pi-Space-Windows-x64.zip\n", "Pi-Space-Windows-x64.zip") == checksum, "The release checksum could not be parsed.");
     Assert(UpdateService.ParseChecksum($"{checksum}  another.zip\n", "Pi-Space-Windows-x64.zip") is null, "A checksum for the wrong asset was accepted.");
 
-    Console.WriteLine("Windows provider and update checks passed.");
+    Assert(WindowsKokoroService.IsVoiceSupported("af_heart"), "The default Kokoro voice is not supported.");
+    Assert(!WindowsKokoroService.IsVoiceSupported("unsupported"), "An unknown Kokoro voice was accepted.");
+    Assert(WindowsKokoroService.PinnedAssetHashes.Count == 4, "The Windows Kokoro asset contract is incomplete.");
+    Assert(WindowsKokoroService.PinnedAssetHashes.All(item => item.Value.Length == 64 && item.Value.All(Uri.IsHexDigit)), "A pinned Kokoro asset hash is invalid.");
+    var incompleteKokoro = Path.Combine(directory, "kokoro-runtime");
+    Directory.CreateDirectory(incompleteKokoro);
+    File.WriteAllText(Path.Combine(incompleteKokoro, "status.json"), "{}");
+    Assert(!WindowsKokoroService.ValidateInstallation(incompleteKokoro), "An incomplete Kokoro runtime was treated as installed.");
+
+    Console.WriteLine("Windows provider, update, and Kokoro checks passed.");
 }
 finally
 {

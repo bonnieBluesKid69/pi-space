@@ -16,20 +16,18 @@ SDK="$(xcrun --sdk macosx --show-sdk-path)"
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/build.sh [--pi-only | --wake-only] [--clean]
+Usage: ./scripts/build.sh [--clean]
 
-Builds universal (Apple silicon + Intel) macOS app bundles into dist/.
+Builds the universal (Apple silicon + Intel) macOS Pi Space app into dist/.
 Environment overrides: ARCHS, MACOS_MIN_VERSION, BUILD_DIR, DIST_DIR.
 EOF
 }
 
 BUILD_PI=1
-BUILD_WAKE=1
 CLEAN=0
 while (($#)); do
   case "$1" in
-    --pi-only) BUILD_WAKE=0 ;;
-    --wake-only) BUILD_PI=0 ;;
+    --pi-only) ;;
     --clean) CLEAN=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
@@ -157,6 +155,5 @@ build_wake() {
 }
 
 ((BUILD_PI)) && build_pi
-((BUILD_WAKE)) && build_wake
 
 echo "Build complete."

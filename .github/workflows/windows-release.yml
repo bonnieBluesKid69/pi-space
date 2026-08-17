@@ -69,7 +69,6 @@ jobs:
             release/Pi-Space-macOS.dmg
             release/Pi-Space-macOS.sha256
             release/Pi-Space-*-macOS.zip
-            release/Wake-Pi-Listener-*-macOS.zip
             release/SHA256SUMS.txt
           if-no-files-found: error
 

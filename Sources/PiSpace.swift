@@ -178,7 +178,7 @@ final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate, AVAudioPla
   private let wakeKey = "PiSpaceWakePhrasesEnabled"
   private let voiceKey = "PiSpaceVoiceIdentifier"
 
-  var wakeEnabled: Bool { UserDefaults.standard.bool(forKey: wakeKey) }
+  var wakeEnabled: Bool { false }
   var voicePace: String { responsePace.rawValue }
   var voiceLength: String { responseLength }
   var isMicrophoneMuted: Bool { microphoneMuted }
@@ -356,17 +356,13 @@ final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate, AVAudioPla
     kokoroProcess = nil
   }
 
-  func startWakeListenerIfEnabled() {
-    guard wakeEnabled, mode == .idle else { return }
-    requestPermissions { [weak self] in self?.startRecognition(.wake) }
-  }
+  func startWakeListenerIfEnabled() {}
 
   func setWakeEnabled(_ enabled: Bool) {
-    UserDefaults.standard.set(enabled, forKey: wakeKey)
-    if enabled {
-      if mode == .idle { startWakeListenerIfEnabled() }
-    } else if mode != .idle {
-      end()
+    UserDefaults.standard.set(false, forKey: wakeKey)
+    if mode == .wake {
+      stopRecognition()
+      mode = .idle
     }
     onSettingsChanged?()
   }
@@ -449,11 +445,6 @@ final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate, AVAudioPla
     stopRecognition()
     onState?("idle", "")
     if shouldAbort { onAbort?() }
-    if wakeEnabled {
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-        self?.startWakeListenerIfEnabled()
-      }
-    }
   }
 
   func receiveResponse(_ text: String) {
@@ -786,9 +777,8 @@ final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate, AVAudioPla
     }
     let nextRequest = SFSpeechAudioBufferRecognitionRequest()
     nextRequest.shouldReportPartialResults = true
-    nextRequest.taskHint = targetMode == .wake ? .confirmation : .dictation
-    nextRequest.contextualStrings = targetMode == .wake
-      ? ["wake up Pi"] : ["go to sleep Pi", "stop Pi", "wait Pi"]
+    nextRequest.taskHint = .dictation
+    nextRequest.contextualStrings = []
     request = nextRequest
     node.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
       nextRequest.append(buffer)
@@ -831,17 +821,7 @@ final class VoiceConversation: NSObject, AVSpeechSynthesizerDelegate, AVAudioPla
     let normalized = clean.lowercased()
       .replacingOccurrences(of: "[^a-z0-9]+", with: " ", options: .regularExpression)
       .trimmingCharacters(in: .whitespacesAndNewlines)
-    if mode == .wake {
-      if normalized.contains("wake up pi") || normalized.contains("wake up pie") {
-        onWake?()
-        start()
-      }
-      return
-    }
-    if normalized.contains("go to sleep pi") || normalized.contains("go to sleep pie") {
-      end()
-      return
-    }
+    if mode == .wake { return }
     if mode == .speaking {
       guard isLikelyBargeIn(normalized, final: final) else { return }
       interruptSpeech(with: clean)
@@ -1279,7 +1259,7 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
   }
   override func viewDidLoad() {
     super.viewDidLoad()
-    UserDefaults.standard.register(defaults: ["PiSpaceWakePhrasesEnabled": true])
+    UserDefaults.standard.set(false, forKey: "PiSpaceWakePhrasesEnabled")
     DistributedNotificationCenter.default().addObserver(
       self, selector: #selector(receiveVoiceAction(_:)), name: voiceNotification, object: nil)
     voice.onState = { [weak self] state, text in self?.js("voiceState", ["state": state, "text": text]) }
@@ -1363,7 +1343,7 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
       "bridgeVersion": 1,
       "platform": "macos",
       "voice": true,
-      "wakePhrases": true,
+      "wakePhrases": false,
       "kokoro": kokoroSupported,
       "fileDialogs": true,
       "secureProviderConfig": true,

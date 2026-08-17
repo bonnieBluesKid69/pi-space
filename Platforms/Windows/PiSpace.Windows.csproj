@@ -25,11 +25,13 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3065.39" />
     <PackageReference Include="System.IO.FileSystem.AccessControl" Version="5.0.0" />
+    <PackageReference Include="System.Speech" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>
     <Content Include="..\..\Resources\PiSpace.html" Link="Resources\PiSpace.html" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\Resources\pi-space-bridge.js" Link="Resources\pi-space-bridge.js" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\Resources\vendor\**\*" Link="Resources\vendor\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Resources\kokoro-windows-synthesize.py" Link="Resources\kokoro-windows-synthesize.py" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

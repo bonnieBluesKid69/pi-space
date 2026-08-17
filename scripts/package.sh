@@ -31,12 +31,10 @@ RELEASE_DIR="$ROOT/release"
 rm -rf "$RELEASE_DIR"
 mkdir -p "$RELEASE_DIR"
 
-for item in "Pi Space.app|Pi-Space-$VERSION-macOS.zip" "Wake Pi Listener.app|Wake-Pi-Listener-$VERSION-macOS.zip"; do
-  app="${item%%|*}"
-  archive="${item#*|}"
-  [[ -d "$ROOT/dist/$app" ]] || { echo "Missing dist/$app" >&2; exit 1; }
-  COPYFILE_DISABLE=1 ditto -c -k --norsrc --keepParent "$ROOT/dist/$app" "$RELEASE_DIR/$archive"
-done
+app="Pi Space.app"
+archive="Pi-Space-$VERSION-macOS.zip"
+[[ -d "$ROOT/dist/$app" ]] || { echo "Missing dist/$app" >&2; exit 1; }
+COPYFILE_DISABLE=1 ditto -c -k --norsrc --keepParent "$ROOT/dist/$app" "$RELEASE_DIR/$archive"
 
 DMG="$RELEASE_DIR/Pi-Space-macOS.dmg"
 DMG_STAGE="$ROOT/build/dmg-stage"

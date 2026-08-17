@@ -20,14 +20,9 @@ jobs:
       - name: Verify bundles
         run: |
           set -euo pipefail
-          for app in "dist/Pi Space.app" "dist/Wake Pi Listener.app"; do
-            codesign --verify --deep --strict "$app"
-            plutil -lint "$app/Contents/Info.plist"
-          done
-          test "$(lipo -archs 'dist/Pi Space.app/Contents/MacOS/PiSpace')" = "x86_64 arm64" || \
-            test "$(lipo -archs 'dist/Pi Space.app/Contents/MacOS/PiSpace')" = "arm64 x86_64"
-          test "$(lipo -archs 'dist/Wake Pi Listener.app/Contents/MacOS/WakePi')" = "x86_64 arm64" || \
-            test "$(lipo -archs 'dist/Wake Pi Listener.app/Contents/MacOS/WakePi')" = "arm64 x86_64"
+          codesign --verify --deep --strict "dist/Pi Space.app"
+          plutil -lint "dist/Pi Space.app/Contents/Info.plist"
+          test "$(lipo -archs 'dist/Pi Space.app/Contents/MacOS/PiSpace')" = "arm64 x86_64"
 
   windows:
     runs-on: windows-latest
@@ -49,6 +44,7 @@ jobs:
           if (!(Test-Path "dist/windows/PiSpace.exe")) { throw "PiSpace.exe was not published" }
           if (!(Test-Path "dist/windows/Resources/PiSpace.html")) { throw "Shared UI was not published" }
           if (!(Test-Path "dist/windows/Resources/pi-space-bridge.js")) { throw "Shared bridge was not published" }
+          if (!(Test-Path "dist/windows/Resources/kokoro-windows-synthesize.py")) { throw "Windows Kokoro helper was not published" }
       - name: Upload Windows preview
         uses: actions/upload-artifact@v4
         with:

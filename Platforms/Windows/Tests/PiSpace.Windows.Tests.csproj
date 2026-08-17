@@ -11,6 +11,7 @@
   <ItemGroup>
     <Compile Include="..\ProviderConfig.cs" Link="ProviderConfig.cs" />
     <Compile Include="..\UpdateService.cs" Link="UpdateService.cs" />
+    <Compile Include="..\WindowsKokoroService.cs" Link="WindowsKokoroService.cs" />
     <PackageReference Include="System.IO.FileSystem.AccessControl" Version="5.0.0" />
   </ItemGroup>
 </Project>

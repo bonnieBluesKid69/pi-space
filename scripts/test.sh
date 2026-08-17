@@ -10,13 +10,10 @@ echo "Building app bundles..."
 "$ROOT/scripts/build.sh" --clean
 
 PI_APP="$ROOT/dist/Pi Space.app"
-WAKE_APP="$ROOT/dist/Wake Pi Listener.app"
 
-for app in "$PI_APP" "$WAKE_APP"; do
-  [[ -d "$app" ]] || { echo "Missing bundle: $app" >&2; exit 1; }
-  codesign --verify --deep --strict "$app"
-  plutil -lint "$app/Contents/Info.plist" >/dev/null
-done
+[[ -d "$PI_APP" ]] || { echo "Missing bundle: $PI_APP" >&2; exit 1; }
+codesign --verify --deep --strict "$PI_APP"
+plutil -lint "$PI_APP/Contents/Info.plist" >/dev/null
 
 [[ -f "$PI_APP/Contents/Resources/PiSpace.html" ]]
 [[ -f "$PI_APP/Contents/Resources/pi-space-bridge.js" ]]
@@ -27,10 +24,6 @@ done
 [[ -f "$PI_APP/Contents/Resources/vendor/highlight.min.js" ]]
 [[ "$(lipo -archs "$PI_APP/Contents/MacOS/PiSpace")" == *arm64* ]]
 [[ "$(lipo -archs "$PI_APP/Contents/MacOS/PiSpace")" == *x86_64* ]]
-[[ "$(lipo -archs "$WAKE_APP/Contents/MacOS/WakePi")" == *arm64* ]]
-[[ "$(lipo -archs "$WAKE_APP/Contents/MacOS/WakePi")" == *x86_64* ]]
-strings "$WAKE_APP/Contents/MacOS/WakePi" | grep -q "Start Voice Conversation"
-strings "$WAKE_APP/Contents/MacOS/WakePi" | grep -q "goodbye Pi"
 
 RPC_STDERR="$(mktemp -t pi-space-rpc-stderr.XXXXXX)"
 trap 'rm -f "$RPC_STDERR"' EXIT
