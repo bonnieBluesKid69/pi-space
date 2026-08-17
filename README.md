@@ -1,8 +1,8 @@
 # Pi Space
 
-Pi Space is a local desktop interface for the [Pi coding agent](https://github.com/earendil-works/pi). It runs Pi in RPC mode and presents chats, tool activity, saved sessions, model selection, thinking levels, workspaces, and persistent custom instructions in a desktop window.
+Pi Space is a local desktop interface for the [Pi coding agent](https://github.com/earendil-works/pi). It runs Pi in RPC mode and presents chats, tool activity, saved sessions, model selection, thinking levels, workspaces, persistent custom instructions, and click-to-start voice conversations in a desktop window.
 
-The macOS app is the current full-featured version. A native Windows WebView2 preview is available for the core text-agent workflow.
+Native macOS and Windows x64 apps share the same interface and core agent workflow. Both support local voice conversations while the in-app voice panel is active; Pi Space does not listen while idle.
 
 > [!IMPORTANT]
 > Pi Space is a client for Pi, not a separate AI service. You must install Pi and authenticate a supported model provider before using the app.
@@ -16,9 +16,11 @@ The macOS app is the current full-featured version. A native Windows WebView2 pr
 - Model and thinking-level selectors
 - Locally stored custom instructions
 - Drag-and-drop and native file attachments
-- In-app voice, local Kokoro speech, and optional menu-bar wake listener on macOS
+- Click-to-start in-app voice conversations on macOS and Windows
+- Local Kokoro speech: MLX on Apple silicon and ONNX on Windows x64
+- Voice transcription, streaming playback, interruption, mute, pause/resume, repeat, and immediate end cleanup
 - Universal macOS builds for Apple silicon and Intel
-- Native Windows x64 WebView2 preview for text chat and tools
+- Native Windows x64 WebView2 app for chat, tools, sessions, workspaces, settings, updates, and voice
 
 ## Platform guides
 
@@ -64,15 +66,7 @@ cd pi-space
 ./scripts/install.sh
 ```
 
-This builds a universal app, installs it to `~/Applications/Pi Space.app`, and opens it.
-
-To include the optional voice listener:
-
-```bash
-./scripts/install.sh --with-wake-listener
-```
-
-The listener asks for Microphone and Speech Recognition access when first opened. It runs in the menu bar. Click the menu-bar icon and use **Listening Enabled** to turn microphone recognition on or off; the setting persists across relaunches. When it is off, Wake Pi does not access the microphone or Speech Recognition service. Use **Start Voice Conversation** for a continuous back-and-forth conversation with Pi, or **End Voice Conversation** to stop it.
+This builds a universal app, installs it to `~/Applications/Pi Space.app`, and opens it. Voice is started only from the microphone control inside Pi Space; there is no background wake listener.
 
 ## macOS updating
 
@@ -86,7 +80,7 @@ For source installations, the Git updater remains available:
 ./scripts/update.sh
 ```
 
-The updater checks GitHub, fast-forwards to the latest `main` branch, rebuilds Pi Space, and reinstalls it. If Wake Pi Listener is already installed, it is updated and reloaded as a single LaunchAgent-managed process while retaining its **Listening Enabled** preference.
+The updater checks GitHub, fast-forwards to the latest `main` branch, rebuilds Pi Space, and reinstalls it.
 
 Use `./scripts/update.sh --check` to check for a new version without installing it. The updater refuses to overwrite uncommitted changes, local commits, or divergent Git history.
 
@@ -146,10 +140,10 @@ Read [SECURITY.md](SECURITY.md) before using Pi Space on sensitive or untrusted 
 
 ```bash
 make check       # Type-check sources and scan for accidentally committed secrets
-make build       # Build both universal app bundles into dist/
-make test        # Build, validate signatures/bundles, and smoke-test Pi RPC
+make build       # Build the universal Pi Space app into dist/
+make test        # Build, validate the signature/bundle, and smoke-test Pi RPC
 make install     # Install Pi Space to ~/Applications
-make package     # Create the macOS DMG, ZIP archives, and checksums in release/
+make package     # Create the macOS DMG, ZIP archive, and checksums in release/
 ```
 
 For architecture, signing, release, and development details, see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
@@ -160,10 +154,10 @@ For architecture, signing, release, and development details, see [docs/DEVELOPME
 ./scripts/uninstall.sh
 ```
 
-This removes the apps but preserves Pi's configuration, credentials, instructions, and sessions in `~/.pi/agent`.
+This removes Pi Space but preserves Pi's configuration, credentials, instructions, and sessions in `~/.pi/agent`.
 
 ## Project status
 
-Pi Space is an independent community client and is not affiliated with or endorsed by the Pi project. macOS and Windows x64 share the text-agent workflow and click-to-start local voice conversation. Windows voice requires an installed English Windows speech-recognition pack; microphone behavior and acoustic interruption quality should still be validated on real Windows hardware. Public builds remain unsigned, and Linux support is not available yet.
+Pi Space is an independent community client and is not affiliated with or endorsed by the Pi project. macOS and Windows x64 share the text-agent workflow and click-to-start local voice conversation. Windows voice requires an installed English Windows speech-recognition pack and microphone permission. Windows compilation, packaging, checksums, and lifecycle contracts are validated in CI; microphone routing, room acoustics, echo rejection, interruption thresholds, and display scaling still require broader testing on physical Windows hardware. Public builds remain unsigned, and Linux support is not available yet.
 
 The current UI does not render RPC extension dialogs. Pi Space cancels those requests and shows an error rather than accepting them silently.
