@@ -24,14 +24,17 @@ try
     Assert(agent["compat"]?["supportsDeveloperRole"]?.GetValue<bool>() == false, "AgentRouter developer-role compatibility is incorrect.");
     Assert(agent["compat"]?["supportsReasoningEffort"]?.GetValue<bool>() == false, "AgentRouter reasoning compatibility is incorrect.");
 
+    ProviderConfig.Save("", "tr_token-test", "", "https://api.tabitoken.com/v1", configPath, restrictAccess: false);
+    config = ProviderConfig.Load(configPath);
+    Assert(config.IsConfigured("agentrouter"), "Saving another provider erased the AgentRouter key.");
+    Assert(config.IsConfigured("tokenrouter"), "TokenRouter key was not saved.");
+    Assert(!config.IsConfigured("tabitoken"), "Untouched TabiToken became configured.");
+
     ProviderConfig.Save("", "", "", "https://api.tabitoken.com/v1", configPath, restrictAccess: false, openRouterKey: "sk-or-test");
     config = ProviderConfig.Load(configPath);
     Assert(config.IsConfigured("openrouter"), "OpenRouter key was not saved.");
     Assert(config.BaseUrl("openrouter") == "https://openrouter.ai/api/v1", "OpenRouter Base URL is incorrect.");
 
-    Assert(!config.IsConfigured("tabitoken"), "Default TabiToken URL created a false TabiToken configuration.");
-    Assert(config.IsConfigured("tokenrouter"), "TokenRouter key was not saved.");
-    Assert(!config.IsConfigured("tabitoken"), "Untouched TabiToken became configured.");
 
     ProviderConfig.Save("", "", "sk-tabi-test", "https://example.com/v1/", configPath, restrictAccess: false);
     config = ProviderConfig.Load(configPath);
