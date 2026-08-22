@@ -1363,6 +1363,9 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     syncProviderSettings()
     voice.startWakeListenerIfEnabled()
     rpc.start(cwd, continuing: false, provider: selectedProvider, model: selectedModel)
+    if selectedProvider == "openrouter", selectedModel == "stealth/ox-alpha" {
+      rpc.send(["type": "set_thinking_level", "level": "minimal"])
+    }
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in self?.refresh() }
     DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in self?.updater.check(manual: false) }
   }
@@ -1742,6 +1745,9 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
       try writeModelsConfig(config)
       syncProviderSettings(message: "Provider configuration saved. TabiToken is ready.")
       rpc.start(cwd, continuing: true, provider: selectedProvider, model: selectedModel)
+      if selectedProvider == "openrouter", selectedModel == "stealth/ox-alpha" {
+        rpc.send(["type": "set_thinking_level", "level": "minimal"])
+      }
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { [weak self] in self?.refresh() }
     } catch {
       syncProviderSettings(message: "Could not save models.json: \(error.localizedDescription)", success: false)

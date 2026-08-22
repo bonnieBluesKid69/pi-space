@@ -106,6 +106,7 @@ internal sealed class MainForm : Form
         try
         {
             rpc.Start(workspace, continuing, selectedProvider, selectedModel);
+            if (selectedProvider == "openrouter" && selectedModel == "stealth/ox-alpha") rpc.Send(new { type = "set_thinking_level", level = "minimal" });
             _ = Task.Delay(900).ContinueWith(_ => Ui(Refresh));
         }
         catch (Exception error) { Emit("appError", new { message = error.Message }); }
@@ -324,6 +325,7 @@ internal sealed class MainForm : Form
         selectedProvider = provider;
         selectedModel = model;
         rpc.Send(new { type = "set_model", provider, modelId = model });
+        if (provider == "openrouter" && model == "stealth/ox-alpha") rpc.Send(new { type = "set_thinking_level", level = "minimal" });
         SyncProviderSettings($"Switching to {model}...");
     }
 
