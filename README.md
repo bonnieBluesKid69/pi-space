@@ -122,7 +122,12 @@ Commands are handled locally by Pi Space unless marked **Pi RPC**. Slash command
 
 Type `/` in the composer to open autocomplete. Use the arrow keys to move through suggestions, Enter or Tab to select one, and Escape to dismiss the palette.
 
+## Provider setup
+
+OpenRouter can be configured in **Settings → Provider & API Keys**. Pi Space stores the key in `~/.pi/agent/models.json` with owner-only permissions and never displays saved keys in the interface. The managed model is `stealth/ox-alpha` (shown as **Ox Alpha**).
+
 ## Voice commands
+
 
 The microphone button in Pi Space starts the voice conversation directly on macOS and Windows. Pi Space requests microphone and speech-recognition access, shows a live transcript, sends each turn after your selected Fast, Balanced, or Patient pause, and speaks the response. Recognition runs only while the in-app voice panel is active. **End conversation** stops recognition, generation, queued speech, and playback immediately in every voice state.
 

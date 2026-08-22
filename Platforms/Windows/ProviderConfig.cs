@@ -23,13 +23,15 @@ internal sealed class ProviderConfig
 
     private JsonObject? Provider(string name) => root["providers"]?[name] as JsonObject;
 
-    public static void Save(string agentRouterKey, string tokenRouterKey, string tabiTokenKey, string tabiTokenBaseUrl, string? configPath = null, bool restrictAccess = true)
+    public static void Save(string agentRouterKey, string tokenRouterKey, string tabiTokenKey, string tabiTokenBaseUrl, string? configPath = null, bool restrictAccess = true, string openRouterKey = "")
     {
         configPath ??= DefaultConfigPath;
         agentRouterKey = agentRouterKey.Trim();
         tokenRouterKey = tokenRouterKey.Trim();
         tabiTokenKey = tabiTokenKey.Trim();
         tabiTokenBaseUrl = tabiTokenBaseUrl.Trim();
+        openRouterKey = openRouterKey.Trim();
+        if (openRouterKey.Length > 0 && !openRouterKey.StartsWith("sk-or-")) throw new InvalidOperationException("OpenRouter keys must begin with sk-or-.");
 
         if (agentRouterKey.Length > 0 && !agentRouterKey.StartsWith("sk-")) throw new InvalidOperationException("AgentRouter keys must begin with sk-.");
         if (tokenRouterKey.Length > 0 && !tokenRouterKey.StartsWith("sk-") && !tokenRouterKey.StartsWith("tr_")) throw new InvalidOperationException("TokenRouter keys must begin with sk- or tr_.");
@@ -39,6 +41,7 @@ internal sealed class ProviderConfig
         current.root["providers"] = providers;
         providers["agentrouter"] = ManagedProvider(providers["agentrouter"] as JsonObject, "agentrouter", agentRouterKey, null);
         providers["tokenrouter"] = ManagedProvider(providers["tokenrouter"] as JsonObject, "tokenrouter", tokenRouterKey, null);
+        providers["openrouter"] = ManagedProvider(providers["openrouter"] as JsonObject, "openrouter", openRouterKey, null);
 
         var existingTabi = providers["tabitoken"] as JsonObject;
         var existingTabiKey = existingTabi?["apiKey"]?.GetValue<string>()?.Trim() ?? "";
@@ -67,6 +70,7 @@ internal sealed class ProviderConfig
         {
             "agentrouter" => "https://agentrouter.org/v1",
             "tokenrouter" => "https://api.tokenrouter.io/v1",
+            "openrouter" => "https://openrouter.ai/api/v1",
             _ => baseUrl ?? provider["baseUrl"]?.GetValue<string>(),
         };
         provider["api"] = name == "tabitoken" ? "anthropic-messages" : "openai-completions";
@@ -96,6 +100,7 @@ internal sealed class ProviderConfig
         var ids = provider switch
         {
             "agentrouter" => new[] { "gpt-5.6-sol", "claude-opus-5", "claude-opus-4-8" },
+            "openrouter" => new[] { "stealth/ox-alpha" },
             "tokenrouter" => new[] { "moonshotai/kimi-k3-free" },
             _ => new[] { "claude-opus-5", "claude-opus-5-thinking", "claude-opus-4-8", "claude-opus-4-8-thinking" },
         };
@@ -107,8 +112,8 @@ internal sealed class ProviderConfig
                 ["id"] = id, ["name"] = id,
                 ["reasoning"] = provider != "tabitoken" || id.EndsWith("-thinking"),
                 ["input"] = new JsonArray("text", "image"),
-                ["contextWindow"] = provider == "agentrouter" ? 128000 : 200000,
-                ["maxTokens"] = provider == "agentrouter" ? 16384 : 32768,
+                ["contextWindow"] = provider == "agentrouter" ? 128000 : provider == "openrouter" ? 1048576 : 200000,
+                ["maxTokens"] = provider == "agentrouter" ? 16384 : provider == "openrouter" ? 131072 : 32768,
             });
         }
         return result;

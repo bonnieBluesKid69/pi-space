@@ -32,7 +32,7 @@ internal sealed class MainForm : Form
 
     private static readonly object[] ManagedModels =
     [
-        new { choice = "gpt-5.6-sol", variant = "GPT-5.6 Sol", provider = "agentrouter", providerLabel = "AgentRouter", id = "gpt-5.6-sol", name = "gpt-5.6-sol", contextWindow = 128000, maxOutputTokens = 16384, reasoning = true, inputModes = new[] { "Text", "Images" } },
+        new { choice = "ox-alpha", variant = "Ox Alpha", provider = "openrouter", providerLabel = "OpenRouter", id = "stealth/ox-alpha", name = "stealth/ox-alpha", contextWindow = 1048576, maxOutputTokens = 131072, reasoning = true, inputModes = new[] { "Text", "Images", "Video" } },
         new { choice = "opus-5", variant = "Claude Opus 5", provider = "agentrouter", providerLabel = "AgentRouter", id = "claude-opus-5", name = "claude-opus-5", contextWindow = 128000, maxOutputTokens = 16384, reasoning = true, inputModes = new[] { "Text", "Images" } },
         new { choice = "opus-5", variant = "Claude Opus 5", provider = "tabitoken", providerLabel = "TabiToken", id = "claude-opus-5", name = "claude-opus-5", contextWindow = 200000, maxOutputTokens = 32768, reasoning = false, inputModes = new[] { "Text", "Images" } },
         new { choice = "opus-5-thinking", variant = "Claude Opus 5 Thinking", provider = "tabitoken", providerLabel = "TabiToken", id = "claude-opus-5-thinking", name = "claude-opus-5-thinking", contextWindow = 200000, maxOutputTokens = 32768, reasoning = true, inputModes = new[] { "Text", "Images" } },
@@ -348,7 +348,8 @@ internal sealed class MainForm : Form
     {
         if (!string.IsNullOrWhiteSpace(selectedProvider) && !string.IsNullOrWhiteSpace(selectedModel)) return;
         var config = ProviderConfig.Load();
-        if (config.IsConfigured("agentrouter")) { selectedProvider = "agentrouter"; selectedModel = "gpt-5.6-sol"; }
+        if (config.IsConfigured("openrouter")) { selectedProvider = "openrouter"; selectedModel = "stealth/ox-alpha"; }
+        else if (config.IsConfigured("agentrouter")) { selectedProvider = "agentrouter"; selectedModel = "gpt-5.6-sol"; }
         else if (config.IsConfigured("tokenrouter")) { selectedProvider = "tokenrouter"; selectedModel = "moonshotai/kimi-k3-free"; }
         else if (config.IsConfigured("tabitoken")) { selectedProvider = "tabitoken"; selectedModel = "claude-opus-5"; }
     }
@@ -360,6 +361,7 @@ internal sealed class MainForm : Form
         {
             models = ManagedModels,
             agentRouterConfigured = config.IsConfigured("agentrouter"),
+            openRouterConfigured = config.IsConfigured("openrouter"),
             tokenRouterConfigured = config.IsConfigured("tokenrouter"),
             tabiTokenConfigured = config.IsConfigured("tabitoken"),
             tabiTokenBaseURL = config.BaseUrl("tabitoken") ?? "https://api.tabitoken.com/v1",
@@ -380,7 +382,7 @@ internal sealed class MainForm : Form
     {
         try
         {
-            ProviderConfig.Save(String(body, "agentRouterKey"), String(body, "tokenRouterKey"), String(body, "tabiTokenKey"), String(body, "tabiTokenBaseURL"));
+            ProviderConfig.Save(String(body, "agentRouterKey"), String(body, "tokenRouterKey"), String(body, "tabiTokenKey"), String(body, "tabiTokenBaseURL"), openRouterKey: String(body, "openRouterKey"));
             SyncProviderSettings("Provider configuration saved.");
             StartRpc(true);
         }
@@ -390,9 +392,10 @@ internal sealed class MainForm : Form
     private void UpdateProviderKey(string provider, string key)
     {
         var agent = provider == "agentrouter" ? key : "";
+        var open = provider == "openrouter" ? key : "";
         var token = provider == "tokenrouter" ? key : "";
         var tabi = provider == "tabitoken" ? key : "";
-        try { ProviderConfig.Save(agent, token, tabi, ""); SyncProviderSettings("Provider configuration saved."); StartRpc(true); }
+        try { ProviderConfig.Save(agent, token, tabi, "", openRouterKey: open); SyncProviderSettings("Provider configuration saved."); StartRpc(true); }
         catch (Exception error) { SyncProviderSettings(error.Message, false); }
     }
 

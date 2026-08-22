@@ -1226,6 +1226,7 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
   let voiceResponseNotification = Notification.Name("com.olivergreen.pispace.voice.response")
   let modelsURL = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".pi/agent/models.json")
   let managedModels: [[String: Any]] = [
+    ["choice": "ox-alpha", "variant": "Ox Alpha", "provider": "openrouter", "providerLabel": "OpenRouter", "id": "stealth/ox-alpha", "name": "stealth/ox-alpha"],
     ["choice": "gpt-5.6-sol", "variant": "GPT-5.6 Sol", "provider": "agentrouter", "providerLabel": "AgentRouter", "id": "gpt-5.6-sol", "name": "gpt-5.6-sol"],
     ["choice": "opus-5", "variant": "Claude Opus 5", "provider": "agentrouter", "providerLabel": "AgentRouter", "id": "claude-opus-5", "name": "claude-opus-5"],
     ["choice": "opus-5", "variant": "Claude Opus 5", "provider": "tabitoken", "providerLabel": "TabiToken", "id": "claude-opus-5", "name": "claude-opus-5"],
@@ -1236,6 +1237,7 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     ["choice": "kimi-k3-free", "variant": "Kimi K3 Free", "provider": "tokenrouter", "providerLabel": "TokenRouter", "id": "moonshotai/kimi-k3-free", "name": "moonshotai/kimi-k3-free"],
   ]
   let defaultTabiTokenBaseURL = "https://api.tabitoken.com/v1"
+  let defaultOpenRouterBaseURL = "https://openrouter.ai/api/v1"
   let instructionsURL = URL(fileURLWithPath: NSHomeDirectory())
     .appendingPathComponent(".pi/agent/pi-space-instructions.txt")
   func instructions() -> String {
@@ -1498,16 +1500,19 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
         agentRouterKey: b["agentRouterKey"] as? String,
         tokenRouterKey: b["tokenRouterKey"] as? String,
         tabiTokenKey: b["tabiTokenKey"] as? String,
+        openRouterKey: b["openRouterKey"] as? String,
         tabiTokenBaseURL: b["tabiTokenBaseURL"] as? String)
     case "updateProviderKey":
       guard let provider = b["provider"] as? String, let key = b["key"] as? String else { return }
       switch provider.lowercased() {
       case "agentrouter":
-        saveProviderKeys(agentRouterKey: key, tokenRouterKey: nil, tabiTokenKey: nil, tabiTokenBaseURL: nil)
+        saveProviderKeys(agentRouterKey: key, tokenRouterKey: nil, tabiTokenKey: nil, openRouterKey: nil, tabiTokenBaseURL: nil)
       case "tokenrouter":
-        saveProviderKeys(agentRouterKey: nil, tokenRouterKey: key, tabiTokenKey: nil, tabiTokenBaseURL: nil)
+        saveProviderKeys(agentRouterKey: nil, tokenRouterKey: key, tabiTokenKey: nil, openRouterKey: nil, tabiTokenBaseURL: nil)
+      case "openrouter":
+        saveProviderKeys(agentRouterKey: nil, tokenRouterKey: nil, tabiTokenKey: nil, openRouterKey: key, tabiTokenBaseURL: nil)
       case "tabitoken":
-        saveProviderKeys(agentRouterKey: nil, tokenRouterKey: nil, tabiTokenKey: key, tabiTokenBaseURL: nil)
+        saveProviderKeys(agentRouterKey: nil, tokenRouterKey: nil, tabiTokenKey: key, openRouterKey: nil, tabiTokenBaseURL: nil)
       default:
         js("commandResult", ["success": false, "message": "Unknown provider: \(provider)"])
       }
@@ -1543,7 +1548,7 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     return true
   }
   func providerLabel(_ name: String) -> String {
-    ["agentrouter": "AgentRouter", "tokenrouter": "TokenRouter", "tabitoken": "TabiToken"][name]
+    ["agentrouter": "AgentRouter", "openrouter": "OpenRouter", "tokenrouter": "TokenRouter", "tabitoken": "TabiToken"][name]
       ?? name
   }
   func chooseInitialModel() {
@@ -1553,7 +1558,10 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     }
     guard selectedProvider == nil || selectedModel == nil else { return }
     let config = readModelsConfig()
-    if providerConfigured("agentrouter", config: config) {
+    if providerConfigured("openrouter", config: config) {
+      selectedProvider = "openrouter"
+      selectedModel = "stealth/ox-alpha"
+    } else if providerConfigured("agentrouter", config: config) {
       selectedProvider = "agentrouter"
       selectedModel = "gpt-5.6-sol"
     } else if providerConfigured("tokenrouter", config: config) {
@@ -1567,8 +1575,8 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     var value = model
     let provider = model["provider"] as? String ?? ""
     let id = model["id"] as? String ?? ""
-    value["contextWindow"] = provider == "agentrouter" ? 128_000 : 200_000
-    value["maxOutputTokens"] = provider == "agentrouter" ? 16_384 : 32_768
+    value["contextWindow"] = provider == "agentrouter" ? 128_000 : (provider == "openrouter" ? 1_048_576 : 200_000)
+    value["maxOutputTokens"] = provider == "agentrouter" ? 16_384 : (provider == "openrouter" ? 131_072 : 32_768)
     value["reasoning"] = provider != "tabitoken" || id.hasSuffix("-thinking")
     value["inputModes"] = ["Text", "Images"]
     return value
@@ -1579,6 +1587,7 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     var payload: [String: Any] = [
       "models": managedModels.map(modelPresentation),
       "agentRouterConfigured": providerConfigured("agentrouter", config: config),
+      "openRouterConfigured": providerConfigured("openrouter", config: config),
       "tokenRouterConfigured": providerConfigured("tokenrouter", config: config),
       "tabiTokenConfigured": providerConfigured("tabitoken", config: config),
       "tabiTokenBaseURL": ((config["providers"] as? [String: Any])?["tabitoken"] as? [String: Any])?["baseUrl"] as? String ?? defaultTabiTokenBaseURL,
@@ -1610,6 +1619,8 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
       provider["baseUrl"] = "https://agentrouter.org/v1"
     } else if name == "tokenrouter" {
       provider["baseUrl"] = "https://api.tokenrouter.io/v1"
+    } else if name == "openrouter" {
+      provider["baseUrl"] = defaultOpenRouterBaseURL
     } else if let baseURL, !baseURL.isEmpty {
       provider["baseUrl"] = baseURL
     }
@@ -1631,11 +1642,11 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     }
     provider["models"] = managedModels.filter { $0["provider"] as? String == name }.map {
       let id = $0["id"] as! String
-      let contextWindow = name == "agentrouter" ? 128_000 : 200_000
-      let maxTokens = name == "agentrouter" ? 16_384 : 32_768
+      let contextWindow = name == "agentrouter" ? 128_000 : (name == "openrouter" ? 1_048_576 : 200_000)
+      let maxTokens = name == "agentrouter" ? 16_384 : (name == "openrouter" ? 131_072 : 32_768)
       return [
         "id": id, "name": $0["name"]!,
-        "reasoning": name == "agentrouter" || name == "tokenrouter" || id.hasSuffix("-thinking"),
+        "reasoning": name == "agentrouter" || name == "tokenrouter" || name == "openrouter" || id.hasSuffix("-thinking"),
         "input": ["text", "image"], "contextWindow": contextWindow, "maxTokens": maxTokens,
       ]
     }
@@ -1660,6 +1671,8 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
       existing: providers["agentrouter"] as? [String: Any], name: "agentrouter", key: nil)
     providers["tokenrouter"] = managedProvider(
       existing: providers["tokenrouter"] as? [String: Any], name: "tokenrouter", key: nil)
+    providers["openrouter"] = managedProvider(
+      existing: providers["openrouter"] as? [String: Any], name: "openrouter", key: nil)
     if let existing = providers["tabitoken"] as? [String: Any],
       (existing["baseUrl"] as? String)?.isEmpty == false
     {
@@ -1673,7 +1686,7 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     }
   }
   func saveProviderKeys(agentRouterKey: String?, tokenRouterKey: String?, tabiTokenKey: String?,
-    tabiTokenBaseURL: String?)
+    openRouterKey: String?, tabiTokenBaseURL: String?)
   {
     let agentKey = agentRouterKey?.trimmingCharacters(in: .whitespacesAndNewlines)
     let tokenKey = tokenRouterKey?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1685,6 +1698,11 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
       !tokenKey.hasPrefix("tr_"), !tokenKey.hasPrefix("sk-")
     {
       syncProviderSettings(message: "TokenRouter keys must begin with sk- or tr_.", success: false)
+      return
+    }
+    let openKey = openRouterKey?.trimmingCharacters(in: .whitespacesAndNewlines)
+    if let openKey, !openKey.isEmpty, !openKey.hasPrefix("sk-or-") {
+      syncProviderSettings(message: "OpenRouter keys must begin with sk-or-.", success: false)
       return
     }
     let tabiKey = tabiTokenKey?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1712,6 +1730,8 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
       existing: providers["agentrouter"] as? [String: Any], name: "agentrouter", key: agentKey)
     providers["tokenrouter"] = managedProvider(
       existing: providers["tokenrouter"] as? [String: Any], name: "tokenrouter", key: tokenKey)
+    providers["openrouter"] = managedProvider(
+      existing: providers["openrouter"] as? [String: Any], name: "openrouter", key: openKey)
     if !effectiveTabiKey.isEmpty {
       providers["tabitoken"] = managedProvider(
         existing: providers["tabitoken"] as? [String: Any], name: "tabitoken",
