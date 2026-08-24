@@ -130,6 +130,8 @@ internal sealed class MainForm : Form
             case "prompt": SendPrompt(body); break;
             case "abort": voice.End(false); rpc.Send(new { type = "abort" }); break;
             case "newSession": voice.End(false); rpc.Send(new { type = "new_session" }); break;
+            case "sessionTree": rpc.Send(new { type = "get_fork_messages" }); break;
+            case "forkSession": rpc.Send(new { type = "fork", entryId = String(body, "entryId") }); break;
             case "compact": rpc.Send(new { type = "compact" }); break;
             case "refresh": Refresh(); break;
             case "sessions": LoadSessions(); break;
@@ -229,11 +231,12 @@ internal sealed class MainForm : Form
             if (String(message, "type") == "agent_settled" || String(message, "type") == "compaction_end") rpc.Send(new { type = "get_session_stats" });
             if (String(message, "type") != "response" || !Bool(message, "success", true)) return;
             var command = String(message, "command");
-            if (command is "switch_session" or "new_session")
+            if (command is "switch_session" or "new_session" or "fork")
             {
                 rpc.Send(new { type = "get_messages" });
                 rpc.Send(new { type = "get_state" });
                 rpc.Send(new { type = "get_session_stats" });
+                if (command == "fork") Emit("conversationTreeClosed", new { });
             }
             else if (command == "compact")
             {

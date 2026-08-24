@@ -1469,6 +1469,9 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
         NSPasteboard.general.setString(text, forType: .string)
       }
     case "newSession": rpc.send(["type": "new_session"])
+    case "sessionTree": rpc.send(["type": "get_fork_messages"])
+    case "forkSession":
+      if let entryID = b["entryId"] as? String { rpc.send(["type": "fork", "entryId": entryID]) }
     case "compact": rpc.send(["type": "compact"])
     case "rpcCommand":
       guard let command = b["command"] as? String,
@@ -1981,6 +1984,14 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
         rpc.send(["type": "get_messages"])
         rpc.send(["type": "get_state"])
         rpc.send(["type": "get_session_stats"])
+      }
+    } else if command == "fork" {
+      let cancelled = (x["data"] as? [String: Any])?["cancelled"] as? Bool ?? false
+      if !cancelled {
+        rpc.send(["type": "get_messages"])
+        rpc.send(["type": "get_state"])
+        rpc.send(["type": "get_session_stats"])
+        js("conversationTreeClosed", [:])
       }
     } else if command == "compact" {
       rpc.send(["type": "get_messages"])
