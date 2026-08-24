@@ -1861,30 +1861,33 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     guard let text = String(data: data, encoding: .utf8) else {
       return ("New chat", "No messages yet")
     }
+    var savedName: String?
+    var fallback: (String, String)?
     for line in text.split(separator: "\n") {
       guard let lineData = line.data(using: .utf8),
-        let object = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any],
-        object["type"] as? String == "message",
+        let object = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any]
+      else { continue }
+      if object["type"] as? String == "session_info", let name = object["name"] as? String, !name.isEmpty {
+        savedName = name
+        continue
+      }
+      guard object["type"] as? String == "message",
         let message = object["message"] as? [String: Any],
         message["role"] as? String == "user"
       else { continue }
       var prompt = ""
-      if let content = message["content"] as? String {
-        prompt = content
-      } else if let content = message["content"] as? [[String: Any]] {
-        prompt = content.compactMap { $0["text"] as? String }.joined(separator: " ")
-      }
-      prompt = prompt.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !prompt.isEmpty else { continue }
+      if let content = message["content"] as? String { prompt = content }
+      else if let content = message["content"] as? [[String: Any]] { prompt = content.compactMap { $0["text"] as? String }.joined(separator: " ") }
+      prompt = prompt.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression).trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !prompt.isEmpty, fallback == nil else { continue }
       let words = prompt.split(separator: " ")
       var title = words.prefix(7).joined(separator: " ")
       if title.count > 58 { title = String(title.prefix(58)) }
       if words.count > 7 || prompt.count > title.count { title += "…" }
-      let summary = prompt.count > 125 ? String(prompt.prefix(125)) + "…" : prompt
-      return (title, summary)
+      fallback = (title, prompt.count > 125 ? String(prompt.prefix(125)) + "…" : prompt)
     }
-    return ("New chat", "No messages yet")
+    let summary = fallback ?? ("New chat", "No messages yet")
+    return (savedName ?? summary.0, summary.1)
   }
   func sessions() {
     let root = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".pi/agent/sessions")

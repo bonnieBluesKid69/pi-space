@@ -266,26 +266,35 @@ internal sealed class MainForm : Form
         Emit("sessionsLoaded", new { sessions = list });
     }
 
-    private static (string, string) SessionSummary(string path)
+        private static (string, string) SessionSummary(string path)
     {
+        string? savedName = null;
+        (string, string)? fallback = null;
         try
         {
             foreach (var line in File.ReadLines(path).Take(500))
             {
                 using var document = JsonDocument.Parse(line);
                 var root = document.RootElement;
+                if (String(root, "type") == "session_info")
+                {
+                    var name = String(root, "name");
+                    if (!string.IsNullOrWhiteSpace(name)) savedName = name;
+                    continue;
+                }
                 if (String(root, "type") != "message" || !root.TryGetProperty("message", out var message) || String(message, "role") != "user") continue;
                 var prompt = MessageText(message).Replace("\r", " ").Replace("\n", " ").Trim();
-                if (prompt.Length == 0) continue;
+                if (prompt.Length == 0 || fallback != null) continue;
                 var words = prompt.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                 var title = string.Join(" ", words.Take(7));
                 if (title.Length > 58) title = title[..58];
                 if (words.Length > 7 || prompt.Length > title.Length) title += "...";
-                return (title, prompt.Length > 125 ? prompt[..125] + "..." : prompt);
+                fallback = (title, prompt.Length > 125 ? prompt[..125] + "..." : prompt);
             }
         }
         catch { }
-        return ("New chat", "No messages yet");
+        var summary = fallback ?? ("New chat", "No messages yet");
+        return (savedName ?? summary.Item1, summary.Item2);
     }
 
     private void SwitchSession(int index)
