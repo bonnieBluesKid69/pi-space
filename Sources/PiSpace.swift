@@ -1469,9 +1469,11 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
         NSPasteboard.general.setString(text, forType: .string)
       }
     case "newSession": rpc.send(["type": "new_session"])
-    case "sessionTree": rpc.send(["type": "get_fork_messages"])
+    case "sessionTree": rpc.send(["type": "get_tree"])
     case "forkSession":
       if let entryID = b["entryId"] as? String { rpc.send(["type": "fork", "entryId": entryID]) }
+    case "setSessionName":
+      if let name = b["name"] as? String { rpc.send(["type": "set_session_name", "name": name]) }
     case "compact": rpc.send(["type": "compact"])
     case "rpcCommand":
       guard let command = b["command"] as? String,
