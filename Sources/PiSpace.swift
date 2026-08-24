@@ -1226,15 +1226,15 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
   let voiceResponseNotification = Notification.Name("com.olivergreen.pispace.voice.response")
   let modelsURL = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".pi/agent/models.json")
   let managedModels: [[String: Any]] = [
-    ["choice": "ox-alpha", "variant": "Ox Alpha", "provider": "openrouter", "providerLabel": "OpenRouter", "id": "stealth/ox-alpha", "name": "stealth/ox-alpha"],
-    ["choice": "gpt-5.6-sol", "variant": "GPT-5.6 Sol", "provider": "agentrouter", "providerLabel": "AgentRouter", "id": "gpt-5.6-sol", "name": "gpt-5.6-sol"],
-    ["choice": "opus-5", "variant": "Claude Opus 5", "provider": "agentrouter", "providerLabel": "AgentRouter", "id": "claude-opus-5", "name": "claude-opus-5"],
-    ["choice": "opus-5", "variant": "Claude Opus 5", "provider": "tabitoken", "providerLabel": "TabiToken", "id": "claude-opus-5", "name": "claude-opus-5"],
-    ["choice": "opus-5-thinking", "variant": "Claude Opus 5 Thinking", "provider": "tabitoken", "providerLabel": "TabiToken", "id": "claude-opus-5-thinking", "name": "claude-opus-5-thinking"],
-    ["choice": "opus-4.8", "variant": "Claude Opus 4.8", "provider": "agentrouter", "providerLabel": "AgentRouter", "id": "claude-opus-4-8", "name": "claude-opus-4-8"],
-    ["choice": "opus-4.8", "variant": "Claude Opus 4.8", "provider": "tabitoken", "providerLabel": "TabiToken", "id": "claude-opus-4-8", "name": "claude-opus-4-8"],
-    ["choice": "opus-4.8-thinking", "variant": "Claude Opus 4.8 Thinking", "provider": "tabitoken", "providerLabel": "TabiToken", "id": "claude-opus-4-8-thinking", "name": "claude-opus-4-8-thinking"],
-    ["choice": "kimi-k3-free", "variant": "Kimi K3 Free", "provider": "tokenrouter", "providerLabel": "TokenRouter", "id": "moonshotai/kimi-k3-free", "name": "moonshotai/kimi-k3-free"],
+    ["choice": "ox-alpha", "variant": "Ox Alpha", "provider": "openrouter", "providerLabel": "OpenRouter", "id": "stealth/ox-alpha", "name": "stealth/ox-alpha", "contextWindow": 1_048_576, "maxOutputTokens": 131_072],
+    ["choice": "gpt-5.6-sol", "variant": "GPT-5.6 Sol", "provider": "agentrouter", "providerLabel": "AgentRouter", "id": "gpt-5.6-sol", "name": "gpt-5.6-sol", "contextWindow": 128_000, "maxOutputTokens": 16_384],
+    ["choice": "opus-5", "variant": "Claude Opus 5", "provider": "agentrouter", "providerLabel": "AgentRouter", "id": "claude-opus-5", "name": "claude-opus-5", "contextWindow": 128_000, "maxOutputTokens": 16_384],
+    ["choice": "opus-5", "variant": "Claude Opus 5", "provider": "tabitoken", "providerLabel": "TabiToken", "id": "claude-opus-5", "name": "claude-opus-5", "contextWindow": 200_000, "maxOutputTokens": 32_768],
+    ["choice": "opus-5-thinking", "variant": "Claude Opus 5 Thinking", "provider": "tabitoken", "providerLabel": "TabiToken", "id": "claude-opus-5-thinking", "name": "claude-opus-5-thinking", "contextWindow": 200_000, "maxOutputTokens": 32_768],
+    ["choice": "opus-4.8", "variant": "Claude Opus 4.8", "provider": "agentrouter", "providerLabel": "AgentRouter", "id": "claude-opus-4-8", "name": "claude-opus-4-8", "contextWindow": 128_000, "maxOutputTokens": 16_384],
+    ["choice": "opus-4.8", "variant": "Claude Opus 4.8", "provider": "tabitoken", "providerLabel": "TabiToken", "id": "claude-opus-4-8", "name": "claude-opus-4-8", "contextWindow": 200_000, "maxOutputTokens": 32_768],
+    ["choice": "opus-4.8-thinking", "variant": "Claude Opus 4.8 Thinking", "provider": "tabitoken", "providerLabel": "TabiToken", "id": "claude-opus-4-8-thinking", "name": "claude-opus-4-8-thinking", "contextWindow": 200_000, "maxOutputTokens": 32_768],
+    ["choice": "kimi-k3-free", "variant": "Kimi K3 Free", "provider": "tokenrouter", "providerLabel": "TokenRouter", "id": "moonshotai/kimi-k3-free", "name": "moonshotai/kimi-k3-free", "contextWindow": 200_000, "maxOutputTokens": 32_768],
   ]
   let defaultTabiTokenBaseURL = "https://api.tabitoken.com/v1"
   let defaultOpenRouterBaseURL = "https://openrouter.ai/api/v1"
@@ -1578,8 +1578,8 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     var value = model
     let provider = model["provider"] as? String ?? ""
     let id = model["id"] as? String ?? ""
-    value["contextWindow"] = provider == "agentrouter" ? 128_000 : (provider == "openrouter" ? 1_048_576 : 200_000)
-    value["maxOutputTokens"] = provider == "agentrouter" ? 16_384 : (provider == "openrouter" ? 131_072 : 32_768)
+    value["contextWindow"] = model["contextWindow"] as? Int ?? 128_000
+    value["maxOutputTokens"] = model["maxOutputTokens"] as? Int ?? 16_384
     value["reasoning"] = provider != "tabitoken" || id.hasSuffix("-thinking")
     value["inputModes"] = ["Text", "Images"]
     return value
@@ -1645,8 +1645,8 @@ final class Controller: NSViewController, WKScriptMessageHandler, WKNavigationDe
     }
     provider["models"] = managedModels.filter { $0["provider"] as? String == name }.map {
       let id = $0["id"] as! String
-      let contextWindow = name == "agentrouter" ? 128_000 : (name == "openrouter" ? 1_048_576 : 200_000)
-      let maxTokens = name == "agentrouter" ? 16_384 : (name == "openrouter" ? 131_072 : 32_768)
+      let contextWindow = $0["contextWindow"] as? Int ?? 128_000
+      let maxTokens = $0["maxOutputTokens"] as? Int ?? 16_384
       return [
         "id": id, "name": $0["name"]!,
         "reasoning": name == "agentrouter" || name == "tokenrouter" || name == "openrouter" || id.hasSuffix("-thinking"),
